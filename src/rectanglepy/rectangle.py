@@ -94,8 +94,8 @@ def rectangle_consens(
     rectangle_signature_results = []
     most_recent_signatures = None
 
-    for _i in range(consensus_runs):
-        logger.info(f"Running consensus run {_i + 1} of {consensus_runs}")
+    for i in range(consensus_runs):
+        logger.info(f"Running consensus run {i + 1} of {consensus_runs}")
         signatures = build_rectangle_signatures(
             adata,
             cell_type_col,
@@ -108,6 +108,7 @@ def rectangle_consens(
             n_cpus=n_cpus,
             subsample=subsample,
             sample_size=sample_size,
+            run=i,
         )
         rectangle_signature_results.append(signatures)
         most_recent_signatures = signatures

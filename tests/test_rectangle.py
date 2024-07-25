@@ -25,12 +25,21 @@ def test_rectangle():
 
 def test_rectangle_consensus():
     sc_data, annotations, bulks = rectanglepy.load_tutorial_data()
+    sc_data = sc_data.iloc[:, :500]
     sc_data_adata = AnnData(sc_data, obs=annotations.to_frame(name="cell_type"))
 
     result = rectanglepy.rectangle_consens(
-        sc_data_adata, bulks, optimize_cutoffs=False, p=0.5, lfc=0.0, consensus_runs=2, sample_size=50
+        sc_data_adata, bulks, optimize_cutoffs=False, p=0.5, lfc=0.0, consensus_runs=3, sample_size=50
     )
 
     assert isinstance(result[0], pd.DataFrame)
     assert isinstance(result[1], RectangleSignatureResult)
     assert isinstance(result[2], ConsensusResult)
+
+    # all bias factors should differ, else there is a problem with the random sampling
+    consensus_results = result[2]
+    signature_results = consensus_results.rectangle_signature_results
+    bias_factors = [result.bias_factors for result in signature_results]
+    assert bias_factors[0]["Monocytes"] != bias_factors[1]["Monocytes"]
+    assert bias_factors[0]["Monocytes"] != bias_factors[2]["Monocytes"]
+    assert bias_factors[1]["Monocytes"] != bias_factors[2]["Monocytes"]

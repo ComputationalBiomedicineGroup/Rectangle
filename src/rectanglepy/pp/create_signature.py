@@ -245,6 +245,7 @@ def build_rectangle_signatures(
     subsample: bool = False,
     sample_size: int = 1500,
     n_cpus: int = None,
+    run: int = 0,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
 
@@ -272,6 +273,8 @@ def build_rectangle_signatures(
         The log fold change threshold for the DE analysis (only used if optimize_cutoffs is False).
     n_cpus
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
+    run
+        The consensus run number for the analysis. Defaults to 0.
 
     Returns
     -------
@@ -286,7 +289,7 @@ def build_rectangle_signatures(
 
     annotations = adata.obs[cell_type_col]
     if subsample:
-        annotations = _even(annotations, sample_size)
+        annotations = _even(annotations, sample_size, run)
         adata = adata[annotations.index]
 
     if layer is not None:
@@ -448,7 +451,8 @@ def _reduce_to_common_genes(bulks: pd.DataFrame, sc_data: pd.DataFrame):
     return bulks, sc_data
 
 
-def _even(annotations: pd.Series, number: int) -> pd.Series:
+def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
+    np.random.seed(run)
     assert number > 0, "Number of cells must be greater than 0"
     annotation_counts = annotations.value_counts()
     selected_cells = []
