@@ -451,7 +451,7 @@ def _reduce_to_common_genes(bulks: pd.DataFrame, sc_data: pd.DataFrame):
     return bulks, sc_data
 
 
-def _even(annotations: pd.Series, number: int, run: int) -> pd.Series:
+def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
     np.random.seed(run)
     assert number > 0, "Number of cells must be greater than 0"
     annotation_counts = annotations.value_counts()
