@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [0.1.7] - 2024-07-25
+
+### Fixed
+
+-   Fixed bug in the consensus method.
+
 ## [0.1.6] - 2024-05-07
 
 ### Added
