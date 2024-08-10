@@ -34,7 +34,9 @@ def _create_condition_number_matrices(de_adjusted, pseudo_signature):
     loop_range = min(longest_de_analysis, 200)
     range_minimum = 30
 
-    if loop_range < range_minimum:
+    if loop_range < 8:
+        range_minimum = 4
+    elif loop_range < range_minimum:
         range_minimum = 8
 
     for i in range(range_minimum, loop_range):
@@ -368,9 +370,14 @@ def _optimize_parameters(
     bulks, real_fractions = _generate_pseudo_bulks(sc_data, annotations, genes)
     for p in ps:
         for lfc in lfcs:
-            rmse, pearson_r = _assess_parameter_fit(lfc, p, bulks, real_fractions, pseudo_signature_counts, de_results)
-            logger.info(f"RMSE:{rmse}, Pearson R:{pearson_r} for p={p}, lfc={lfc}")
-            results.append({"p": p, "lfc": lfc, "rmse": rmse, "pearson_r": pearson_r})
+            try:
+                rmse, pearson_r = _assess_parameter_fit(
+                    lfc, p, bulks, real_fractions, pseudo_signature_counts, de_results
+                )
+                logger.info(f"RMSE:{rmse}, Pearson R:{pearson_r} for p={p}, lfc={lfc}")
+                results.append({"p": p, "lfc": lfc, "rmse": rmse, "pearson_r": pearson_r})
+            except Exception as e:
+                logger.error(f"Error in assessing parameter fit for p={p}, lfc={lfc}: {e}")
 
     results_df = pd.DataFrame(results)
     results_df = results_df.sort_values(by=["pearson_r", "rmse"], ascending=[False, True])
