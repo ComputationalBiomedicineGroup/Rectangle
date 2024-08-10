@@ -114,6 +114,8 @@ def rectangle_consens(
         most_recent_signatures = signatures
         cell_fractions = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
         estimations.append(cell_fractions)
+        unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
+        logger.info(f"Correlation between genes and unknown cell type: {unkn_gene_corr.mean()}")
 
     consensus_results = ConsensusResult(estimations, rectangle_signature_results)
     return pd.concat(estimations).groupby(level=0).median(), most_recent_signatures, consensus_results
@@ -197,3 +199,11 @@ def load_tutorial_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         bulks = pd.read_csv(bulks_file, index_col=0, compression="zip")
 
     return sc_counts.T, annotations, bulks.T
+
+
+def _genes_linked_to_unkn(bulks: DataFrame, unkn_fractions: pd.Series):
+    genes = bulks.columns
+    corr = []
+    for gene in genes:
+        corr.append(unkn_fractions.corr(bulks.loc[:, gene]))
+    return pd.Series(corr, index=genes).sort_values(ascending=False)
