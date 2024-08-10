@@ -22,6 +22,8 @@ class RectangleSignatureResult:
         The number of marker genes per cell type, as a dictionary. Keys are cell type names, values are the number of marker genes.
     optimization_result
         The result of the p lfc cut off optimization, as a pd.DataFrame. Contains the following columns: p, lfc, pearson_r, rsme
+    unkn_gene_corr
+        The correlation between the unknown cell type and the genes linked to the unknown cell type.
     """
 
     def __init__(
@@ -36,6 +38,7 @@ class RectangleSignatureResult:
         marker_genes_per_cluster: dict[str, [str]] = None,
         clustered_signature_genes: pd.Series = None,
         cluster_assignments: list[int or str] = None,
+        unkn_gene_corr: pd.Series = None,
     ):
         self.signature_genes = signature_genes
         self.bias_factors = bias_factors
@@ -47,6 +50,7 @@ class RectangleSignatureResult:
         self.clustered_bias_factors = clustered_bias_factors
         self.clustered_signature_genes = clustered_signature_genes
         self.assignments = cluster_assignments
+        self.unkn_gene_corr = unkn_gene_corr
 
     def get_signature_matrix(self, include_mrna_bias=True) -> pd.DataFrame:
         """Calculates the signature matrix by multiplying the pseudobulk_sig_cpm DataFrame subset by signature_genes and the bias_factors Series.
