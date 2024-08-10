@@ -35,7 +35,7 @@ def _create_condition_number_matrices(de_adjusted, pseudo_signature):
     range_minimum = 30
 
     if loop_range < 8:
-        range_minimum = 4
+        range_minimum = 2
     elif loop_range < range_minimum:
         range_minimum = 8
 
