@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [0.1.8] - 2024-09-06
+
+### Added
+
+-   RectangleSignatureResult now returns correlation of bulk genes with the calculated Unknown cell type fraction
+
+### Fixed
+
+-   The consensus method now returns the estimations normalized to 1
+
 ## [0.1.7] - 2024-07-25
 
 ### Fixed
