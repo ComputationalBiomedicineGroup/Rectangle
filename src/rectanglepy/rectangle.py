@@ -116,9 +116,11 @@ def rectangle_consens(
         unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
         signatures.unkn_gene_corr = unkn_gene_corr
         rectangle_signature_results.append(signatures)
-
+    consensus_estimations = pd.concat(estimations).groupby(level=0).median()
+    # normalize the estimations to 1
+    consensus_estimations = consensus_estimations.div(consensus_estimations.sum(axis=1), axis=0)
     consensus_results = ConsensusResult(estimations, rectangle_signature_results)
-    return pd.concat(estimations).groupby(level=0).median(), most_recent_signatures, consensus_results
+    return consensus_estimations, most_recent_signatures, consensus_results
 
 
 def rectangle(
