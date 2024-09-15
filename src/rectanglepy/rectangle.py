@@ -80,6 +80,7 @@ def rectangle_consens(
     assert isinstance(adata, AnnData), "adata must be an AnnData object"
     assert isinstance(bulks, DataFrame), "bulks must be a DataFrame"
 
+    # reduce the single-cell data to the genes that are in the bulk data
     if bulks is not None:
         genes = list(set(bulks.columns) & set(adata.var_names))
         genes = sorted(genes)
@@ -117,7 +118,8 @@ def rectangle_consens(
         signatures.unkn_gene_corr = unkn_gene_corr
         rectangle_signature_results.append(signatures)
     consensus_estimations = pd.concat(estimations).groupby(level=0).median()
-    # normalize the estimations to 1
+
+    # normalize the estimations to 1, needed for the consensus
     consensus_estimations = consensus_estimations.div(consensus_estimations.sum(axis=1), axis=0)
     consensus_results = ConsensusResult(estimations, rectangle_signature_results)
     return consensus_estimations, most_recent_signatures, consensus_results

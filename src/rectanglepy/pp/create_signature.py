@@ -34,6 +34,7 @@ def _create_condition_number_matrices(de_adjusted, pseudo_signature):
     loop_range = min(longest_de_analysis, 200)
     range_minimum = 30
 
+    # should the data be too small we need to adjust the range, mainly for testing purposes
     if loop_range < 8:
         range_minimum = 2
     elif loop_range < range_minimum:
@@ -77,7 +78,7 @@ def _calculate_cluster_range(number_of_cell_types: int) -> tuple[int, int]:
         cluster_factor = 10
     min_number_clusters = max(
         3, number_of_cell_types - cluster_factor
-    )  # we don't want to cluster too many cell types together
+    )  # we don't want to cluster too many cell types together, depending on the number of cell types
     max_number_clusters = number_of_cell_types - 1  # we want to have at least one cluster wih multiple cell types
     return min_number_clusters, max_number_clusters
 
@@ -123,7 +124,7 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
     adjusted_result = de_analysis_result[
         (de_analysis_result["pvalue"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
     ]
-    # if increase p-value and decrease log2FC until genes are found or the threshold is reached
+    # for celltypes with low number of marker genes increase p-value and decrease log2FC until genes are found or the threshold is reached
     while len(adjusted_result) < 10 and (min_log2FC > 0.5 and max_p < 0.05):
         min_log2FC = max(min_log2FC - 0.1, 0.5)
         max_p = min(max_p + 0.001, 0.05)
@@ -361,7 +362,7 @@ def _create_pseudo_count_sig(sc_counts: np.ndarray, annotations: pd.Series, var_
 def _optimize_parameters(
     sc_data: pd.DataFrame, annotations: pd.Series, pseudo_signature_counts: pd.DataFrame, de_results, genes=None
 ) -> pd.DataFrame:
-    # if there are many cell types we relax the cutoffs
+    # search space for p and lfc
     lfcs = [x / 100 for x in range(140, 200, 10)]
     ps = [x / 1000 for x in range(15, 20, 1)]
 
@@ -380,6 +381,7 @@ def _optimize_parameters(
                 logger.error(f"Error in assessing parameter fit for p={p}, lfc={lfc}: {e}")
 
     results_df = pd.DataFrame(results)
+    # best results first
     results_df = results_df.sort_values(by=["pearson_r", "rmse"], ascending=[False, True])
 
     return results_df
