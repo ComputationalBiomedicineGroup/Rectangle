@@ -15,7 +15,7 @@ def test_load_tutorial_data():
 
 def test_rectangle():
     sc_data, annotations, bulks = rectanglepy.load_tutorial_data()
-    sc_data = sc_data.iloc[:, :500]
+    sc_data = sc_data.iloc[:, :2000]
     sc_data_adata = AnnData(sc_data, obs=annotations.to_frame(name="cell_type"))
 
     result = rectanglepy.rectangle(sc_data_adata, bulks)
