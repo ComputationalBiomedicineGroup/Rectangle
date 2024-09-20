@@ -80,13 +80,6 @@ def rectangle_consens(
     assert isinstance(adata, AnnData), "adata must be an AnnData object"
     assert isinstance(bulks, DataFrame), "bulks must be a DataFrame"
 
-    # reduce the single-cell data to the genes that are in the bulk data
-    if bulks is not None:
-        genes = list(set(bulks.columns) & set(adata.var_names))
-        genes = sorted(genes)
-        adata = adata[:, genes]
-        bulks = bulks[genes]
-
     if consensus_runs > 1:
         logger.info(f"Running {consensus_runs} consensus runs with subsample size {sample_size}")
         subsample = True

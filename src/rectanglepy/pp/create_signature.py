@@ -283,6 +283,10 @@ def build_rectangle_signatures(
     -------
     The result of the rectangle signature analysis which is of type RectangleSignatureResult.
     """
+    annotations = adata.obs[cell_type_col]
+    adata = adata[:, adata.X.sum(axis=0) > len(annotations.value_counts())]
+    adata = adata[:, _filter_genes(adata.var_names)]
+
     if bulks is not None:
         genes = list(set(bulks.columns) & set(adata.var_names))
         genes = sorted(genes)
@@ -290,7 +294,6 @@ def build_rectangle_signatures(
         logger.info(f"Using {len(genes)} common genes between bulks and single-cell data")
         adata = adata[:, genes]
 
-    annotations = adata.obs[cell_type_col]
     if subsample:
         annotations = _even(annotations, sample_size, run)
         adata = adata[annotations.index]
@@ -470,3 +473,11 @@ def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
         cells = np.random.choice(cells, min(number, len(cells)), replace=False)
         selected_cells.extend(cells)
     return annotations.loc[selected_cells]
+
+
+def _filter_genes(genes: [str]) -> [str]:
+    # remove Ribosomal genes
+    genes = [gene for gene in genes if not gene.startswith("RB")]
+    genes = [gene for gene in genes if not gene.startswith("Rb")]
+
+    return genes

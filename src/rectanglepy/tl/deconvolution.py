@@ -180,6 +180,9 @@ def deconvolution(
         A DataFrame containing the estimated cell fractions resulting from deconvolution. Each row represents a sample and each column represents a cell type.
 
     """
+    bulks = bulks.loc[:, _filter_genes(bulks.columns)]
+    bulks = bulks.div(bulks.sum(axis=1), axis=0) * 1e6
+
     if n_cpus is not None:
         num_processes = n_cpus
     else:
@@ -338,3 +341,12 @@ def correct_for_unknown_cell_content(
     estimates_fix.loc["Unknown"] = abs(ukn_cc)
 
     return estimates_fix
+
+
+# TODO move to utils
+def _filter_genes(genes: [str]) -> [str]:
+    # remove Ribosomal genes
+    genes = [gene for gene in genes if not gene.startswith("RB")]
+    genes = [gene for gene in genes if not gene.startswith("Rb")]
+
+    return genes
