@@ -4,6 +4,7 @@ from anndata import AnnData
 from loguru import logger
 from pandas import DataFrame, Series
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 from pydeseq2.ds import DeseqStats
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.stats import pearsonr
@@ -31,8 +32,8 @@ def _create_condition_number_matrices(de_adjusted, pseudo_signature):
     de_adjusted_lengths = {annotation: len(de_adjusted[annotation]) for annotation in de_adjusted}
     longest_de_analysis = max(de_adjusted_lengths.values())
 
-    loop_range = min(longest_de_analysis, 200)
-    range_minimum = 30
+    loop_range = min(longest_de_analysis, 80)
+    range_minimum = 20
 
     # should the data be too small we need to adjust the range, mainly for testing purposes
     if loop_range < 8:
@@ -122,35 +123,59 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
     de_analysis_result["log2_fc"] = de_analysis_result["log2FoldChange"]
     de_analysis_result["gene"] = de_analysis_result.index
     adjusted_result = de_analysis_result[
-        (de_analysis_result["pvalue"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
+        (de_analysis_result["padj"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
     ]
-    # for celltypes with low number of marker genes increase p-value and decrease log2FC until genes are found or the threshold is reached
-    while len(adjusted_result) < 10 and (min_log2FC > 0.5 and max_p < 0.05):
-        min_log2FC = max(min_log2FC - 0.1, 0.5)
-        max_p = min(max_p + 0.001, 0.05)
-        adjusted_result = de_analysis_result[
-            (de_analysis_result["pvalue"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
-        ]
 
     return adjusted_result
 
 
-def _run_deseq2(countsig: pd.DataFrame, n_cpus: int = None) -> dict[str | int, pd.DataFrame]:
+def _run_deseq2(countsig: pd.DataFrame, sc_data, annotations, n_cpus: int = None) -> dict[str | int, pd.DataFrame]:
     results = {}
-    count_df = countsig[countsig.sum(axis=1) > 0].T
+    inference = DefaultInference(n_cpus=n_cpus)
+    number_of_celltypes = len(countsig.columns)
+    cells_per_celltype = [np.sum(annotations == cell_type) for cell_type in countsig.columns]
+    np.random.seed(42)
     for i, cell_type in enumerate(countsig.columns):
-        logger.info(f"Running DE analysis for {cell_type}")
-        condition = np.zeros(len(countsig.columns))
-        condition[i] = 1
-        clinical_df = pd.DataFrame({"condition": condition}, index=countsig.columns)
-        dds = DeseqDataSet(counts=count_df, metadata=clinical_df, design_factors="condition", quiet=True, n_cpus=n_cpus)
-        dds.deseq2()
-        dds.varm["LFC"] = dds.varm["LFC"].round(4)
-        dds.varm["dispersions"] = dds.varm["dispersions"].round(3)
+        countsig_copy = countsig.copy()
 
-        stat_res = DeseqStats(dds, n_cpus=n_cpus, quiet=True)
+        sc_data_filtered = sc_data.T[annotations == cell_type]
+        expressed_cells = (sc_data_filtered > 0).sum(axis=0)
+        if expressed_cells.ndim > 1:  # needed for sparse matrices
+            expressed_cells = np.squeeze(np.asarray(expressed_cells))
+            # make dense out of sparse
+            sc_data_filtered = sc_data_filtered.toarray()
+
+        number_of_bootstraps = min(number_of_celltypes - 3, 4)
+        print(f"Number of bootstraps: {number_of_bootstraps}")
+        rows_to_collect = min(int(np.mean(cells_per_celltype) / (number_of_bootstraps * 2)), 50)
+        for j in range(number_of_bootstraps):
+            selected_rows = np.random.choice(len(sc_data_filtered), rows_to_collect, replace=True)
+            summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
+            bootstrapped = summed_rows
+            # add to countsig as column
+            countsig_copy[f"{cell_type}_bootstrapped_{j}"] = bootstrapped
+
+        threshold = 0.5 * sc_data_filtered.shape[0]
+        genes = countsig_copy.index[expressed_cells > threshold].tolist()
+        count_df_filtered = countsig_copy.loc[genes].T
+        logger.info(f"Running DE analysis for {cell_type}")
+        condition = np.array(["A"] * len(countsig_copy.columns))
+        condition[i] = "B"
+        condition[number_of_celltypes:] = "B"
+
+        clinical_df = pd.DataFrame({"condition": condition}, index=countsig_copy.columns)
+        dds = DeseqDataSet(
+            counts=count_df_filtered,
+            metadata=clinical_df,
+            design_factors="condition",
+            quiet=True,
+            inference=inference,
+            refit_cooks=False,
+        )
+        dds.deseq2()
+        stat_res = DeseqStats(dds, inference=inference, quiet=True, cooks_filter=False)
         stat_res.summary(quiet=True)
-        stat_res.lfc_shrink()
+        stat_res.lfc_shrink("condition_B_vs_A")
         results[cell_type] = stat_res.results_df
 
     return results
@@ -160,7 +185,7 @@ def _de_analysis(
     pseudo_count_sig, sc_data, annotations, p, lfc, optimize_cutoffs: bool, n_cpus: int = None, genes=None
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
-    deseq_results = _run_deseq2(pseudo_count_sig, n_cpus)
+    deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus)
     optimization_results = None
 
     if optimize_cutoffs:
@@ -189,6 +214,9 @@ def _get_marker_genes(deseq_results, logfc, p, pseudo_count_sig):
 
     markers = optimal_condition_matrix.index
     marker_genes_per_cell_type = _get_marker_genes_per_cell_type(de_analysis_adjusted, optimal_condition_number)
+    flattened_markers = [item for sublist in marker_genes_per_cell_type.values() for item in sublist]
+    duplicated_markers = [x for x in flattened_markers if flattened_markers.count(x) > 1]
+    print("duplicated markers: ", duplicated_markers)
     return markers, marker_genes_per_cell_type
 
 
@@ -366,8 +394,8 @@ def _optimize_parameters(
     sc_data: pd.DataFrame, annotations: pd.Series, pseudo_signature_counts: pd.DataFrame, de_results, genes=None
 ) -> pd.DataFrame:
     # search space for p and lfc
-    lfcs = [x / 100 for x in range(140, 200, 10)]
-    ps = [x / 1000 for x in range(15, 20, 1)]
+    lfcs = [x / 100 for x in range(150, 230, 10)]
+    ps = [x / 1000 for x in range(50, 51, 1)]
 
     results = []
     logger.info("generating pseudo bulks")
