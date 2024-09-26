@@ -196,12 +196,12 @@ def test_de_analysis(small_data):
     sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
 
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
-    r1, r2, r3 = _de_analysis(sc_pseudo, adata.X.T, annotations, 0.3, 0.5, False, None, adata.var_names)
+    r1, r2, r3 = _de_analysis(sc_pseudo, adata.X.T, annotations, 0.3, 0.2, False, None, adata.var_names)
 
     sc_counts = sc_counts.astype(pd.SparseDtype("int"))
     csr_sparse_matrix = sc_counts.sparse.to_coo().tocsr()
     adata_sparse = AnnData(csr_sparse_matrix.T, obs=annotations.to_frame(name="cell_type"))
-    rs1, rs2, rs3 = _de_analysis(sc_pseudo, adata_sparse.X.T, annotations, 0.3, 0.5, False, None, adata.var_names)
+    rs1, rs2, rs3 = _de_analysis(sc_pseudo, adata_sparse.X.T, annotations, 0.3, 0.2, False, None, adata.var_names)
 
     assert 5 < len(r1) < 20
     assert len(r2) == 3
