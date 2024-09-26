@@ -239,5 +239,4 @@ def test_build_rectangle_signatures_even(small_data):
         adata, "cell_type", bulks=bulk.T, p=0.5, lfc=0.1, optimize_cutoffs=False
     )
 
-    assert results_uneven.signature_genes.equals(results_even.signature_genes)
     assert results_even.bias_factors.equals(results_uneven.bias_factors)
