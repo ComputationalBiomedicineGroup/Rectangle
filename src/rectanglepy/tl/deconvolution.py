@@ -180,7 +180,6 @@ def deconvolution(
         A DataFrame containing the estimated cell fractions resulting from deconvolution. Each row represents a sample and each column represents a cell type.
 
     """
-    bulks = bulks.loc[:, _filter_genes(bulks.columns)]
     bulks = bulks.div(bulks.sum(axis=1), axis=0) * 1e6
 
     if n_cpus is not None:
@@ -315,6 +314,8 @@ def correct_for_unknown_cell_content(
         estimates_fix.loc["Unknown"] = 0
         return estimates_fix
 
+    signature_genes = pseudo_signature_cpm.index
+    bulk = bulk.loc[signature_genes]
     signature = pseudo_signature_cpm.sort_index()
     bulk = bulk.sort_index()
 
@@ -327,7 +328,7 @@ def correct_for_unknown_cell_content(
     # Calculate the unknown cellular content ad the difference of
     # per-sample overall expression levels in the true vs. reconstructed
     # bulk RNA-seq data, divided by the overall expression in the true bulk
-    ukn_cc = (bulk - bulk_est).sum() / (bulk.sum())
+    ukn_cc = (bulk.sum() - bulk_est.sum()) / (bulk.sum())
     ukn_cc = max(0, ukn_cc)
     # Correct (i.e. scale) the cell fraction estimates so that their sum
     # equals 1 - the unknown cellular content estimated above
@@ -335,12 +336,3 @@ def correct_for_unknown_cell_content(
     estimates_fix.loc["Unknown"] = abs(ukn_cc)
 
     return estimates_fix
-
-
-# TODO move to utils
-def _filter_genes(genes: [str]) -> [str]:
-    # remove Ribosomal genes
-    genes = [gene for gene in genes if not gene.startswith("RB")]
-    genes = [gene for gene in genes if not gene.startswith("Rb")]
-
-    return genes

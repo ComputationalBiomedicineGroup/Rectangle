@@ -241,9 +241,3 @@ def test_build_rectangle_signatures_even(small_data):
 
     assert results_uneven.signature_genes.equals(results_even.signature_genes)
     assert results_even.bias_factors.equals(results_uneven.bias_factors)
-
-
-def test_filter_genes():
-    genes = ["I", "RBss", "Rbss2", "HRBass"]
-    filtered_genes = rectangle.pp.create_signature._filter_genes(genes)
-    assert filtered_genes == ["I", "HRBass"]

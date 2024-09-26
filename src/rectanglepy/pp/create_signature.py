@@ -145,7 +145,7 @@ def _run_deseq2(countsig: pd.DataFrame, sc_data, annotations, n_cpus: int = None
             # make dense out of sparse
             sc_data_filtered = sc_data_filtered.toarray()
 
-        number_of_bootstraps = min(number_of_celltypes - 3, 4)
+        number_of_bootstraps = min(number_of_celltypes - 2, 4)
         print(f"Number of bootstraps: {number_of_bootstraps}")
         rows_to_collect = min(int(np.mean(cells_per_celltype) / (number_of_bootstraps * 2)), 50)
         for j in range(number_of_bootstraps):
@@ -313,7 +313,6 @@ def build_rectangle_signatures(
     """
     annotations = adata.obs[cell_type_col]
     adata = adata[:, adata.X.sum(axis=0) > len(annotations.value_counts())]
-    adata = adata[:, _filter_genes(adata.var_names)]
 
     if bulks is not None:
         genes = list(set(bulks.columns) & set(adata.var_names))
@@ -501,11 +500,3 @@ def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
         cells = np.random.choice(cells, min(number, len(cells)), replace=False)
         selected_cells.extend(cells)
     return annotations.loc[selected_cells]
-
-
-def _filter_genes(genes: [str]) -> [str]:
-    # remove Ribosomal genes
-    genes = [gene for gene in genes if not gene.startswith("RB")]
-    genes = [gene for gene in genes if not gene.startswith("Rb")]
-
-    return genes
