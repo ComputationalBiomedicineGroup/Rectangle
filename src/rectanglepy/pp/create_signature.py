@@ -129,7 +129,9 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
     return adjusted_result
 
 
-def _run_deseq2(countsig: pd.DataFrame, sc_data, annotations, n_cpus: int = None) -> dict[str | int, pd.DataFrame]:
+def _run_deseq2(
+    countsig: pd.DataFrame, sc_data, annotations: pd.Series, n_cpus: int = None
+) -> dict[str | int, pd.DataFrame]:
     results = {}
     inference = DefaultInference(n_cpus=n_cpus)
     number_of_celltypes = len(countsig.columns)
@@ -146,14 +148,13 @@ def _run_deseq2(countsig: pd.DataFrame, sc_data, annotations, n_cpus: int = None
             sc_data_filtered = sc_data_filtered.toarray()
 
         number_of_bootstraps = min(number_of_celltypes - 2, 4)
+        number_of_bootstraps = max(number_of_bootstraps, 1)
         print(f"Number of bootstraps: {number_of_bootstraps}")
         rows_to_collect = min(int(np.mean(cells_per_celltype) / (number_of_bootstraps * 2)), 50)
         for j in range(number_of_bootstraps):
             selected_rows = np.random.choice(len(sc_data_filtered), rows_to_collect, replace=True)
             summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
-            bootstrapped = summed_rows
-            # add to countsig as column
-            countsig_copy[f"{cell_type}_bootstrapped_{j}"] = bootstrapped
+            countsig_copy[f"{cell_type}_bootstrapped_{j}"] = list(summed_rows)
 
         threshold = 0.5 * sc_data_filtered.shape[0]
         genes = countsig_copy.index[expressed_cells > threshold].tolist()
@@ -182,7 +183,7 @@ def _run_deseq2(countsig: pd.DataFrame, sc_data, annotations, n_cpus: int = None
 
 
 def _de_analysis(
-    pseudo_count_sig, sc_data, annotations, p, lfc, optimize_cutoffs: bool, n_cpus: int = None, genes=None
+    pseudo_count_sig, sc_data, annotations: pd.Series, p, lfc, optimize_cutoffs: bool, n_cpus: int = None, genes=None
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
     deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus)

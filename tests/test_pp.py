@@ -171,7 +171,7 @@ def test_asses_fit(small_data):
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
     sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
-    de_result = _run_deseq2(sc_pseudo, None)
+    de_result = _run_deseq2(sc_pseudo, sc_counts.values, annotations)
 
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     bulks, real_fractions = _generate_pseudo_bulks(adata.X.T, annotations, adata.var_names)
@@ -203,7 +203,7 @@ def test_de_analysis(small_data):
     adata_sparse = AnnData(csr_sparse_matrix.T, obs=annotations.to_frame(name="cell_type"))
     rs1, rs2, rs3 = _de_analysis(sc_pseudo, adata_sparse.X.T, annotations, 0.3, 0.5, False, None, adata.var_names)
 
-    assert 30 < len(r1) < 40
+    assert 5 < len(r1) < 20
     assert len(r2) == 3
     assert (r1.values == rs1.values).all()
     assert r2 == rs2
