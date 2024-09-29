@@ -130,7 +130,7 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
 
 
 def _run_deseq2(
-    countsig: pd.DataFrame, sc_data, annotations: pd.Series, n_cpus: int = None
+    countsig: pd.DataFrame, sc_data, annotations: pd.Series, n_cpus: int = None, gene_expression_threshold=0.5
 ) -> dict[str | int, pd.DataFrame]:
     results = {}
     inference = DefaultInference(n_cpus=n_cpus)
@@ -156,7 +156,7 @@ def _run_deseq2(
             summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
             countsig_copy[f"{cell_type}_bootstrapped_{j}"] = list(summed_rows)
 
-        threshold = 0.5 * sc_data_filtered.shape[0]
+        threshold = gene_expression_threshold * sc_data_filtered.shape[0]
         genes = countsig_copy.index[expressed_cells > threshold].tolist()
         count_df_filtered = countsig_copy.loc[genes].T
         logger.info(f"Running DE analysis for {cell_type}")
@@ -183,10 +183,18 @@ def _run_deseq2(
 
 
 def _de_analysis(
-    pseudo_count_sig, sc_data, annotations: pd.Series, p, lfc, optimize_cutoffs: bool, n_cpus: int = None, genes=None
+    pseudo_count_sig,
+    sc_data,
+    annotations: pd.Series,
+    p,
+    lfc,
+    optimize_cutoffs: bool,
+    n_cpus: int = None,
+    genes=None,
+    gene_expression_threshold=0.5,
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
-    deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus)
+    deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus, gene_expression_threshold)
     optimization_results = None
 
     if optimize_cutoffs:
@@ -278,6 +286,7 @@ def build_rectangle_signatures(
     sample_size: int = 1500,
     n_cpus: int = None,
     run: int = 0,
+    gene_expression_threshold=0.5,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
 
@@ -307,6 +316,8 @@ def build_rectangle_signatures(
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
     run
         The consensus run number for the analysis. Defaults to 0.
+    gene_expression_threshold
+        The gene expression threshold for the DE analysis. How many cells need to express a gene to be considered in DGE
 
     Returns
     -------
@@ -341,7 +352,7 @@ def build_rectangle_signatures(
     m_rna_biasfactors = _create_bias_factors(pseudo_sig_counts, sc_counts, annotations)
 
     marker_genes, marker_genes_per_cell_type, optimization_result = _de_analysis(
-        pseudo_sig_counts, sc_counts, annotations, p, lfc, optimize_cutoffs, n_cpus, genes
+        pseudo_sig_counts, sc_counts, annotations, p, lfc, optimize_cutoffs, n_cpus, genes, gene_expression_threshold
     )
     pseudo_sig_cpm = _convert_to_cpm(pseudo_sig_counts)
     logger.info("Starting rectangle cluster analysis")
@@ -361,7 +372,13 @@ def build_rectangle_signatures(
 
     clustered_biasfact = _create_bias_factors(clustered_signature, sc_counts, clustered_annotations)
     clustered_genes, clustered_marker_genes_per_cell_type, _ = _de_analysis(
-        clustered_signature, sc_counts, clustered_annotations, p, lfc, False
+        clustered_signature,
+        sc_counts,
+        clustered_annotations,
+        p,
+        lfc,
+        False,
+        gene_expression_threshold=gene_expression_threshold,
     )
     clustered_signature = _convert_to_cpm(clustered_signature)
     return RectangleSignatureResult(
