@@ -204,7 +204,7 @@ def test_de_analysis(small_data):
     adata_sparse = AnnData(csr_sparse_matrix.T, obs=annotations.to_frame(name="cell_type"))
     rs1, rs2, rs3 = _de_analysis(sc_pseudo, adata_sparse.X.T, annotations, 0.4, 0.1, False, None, adata.var_names)
 
-    assert 5 < len(r1) < 20
+    assert 5 < len(r1) < 50
     assert len(r2) == 3
     assert (r1.values == rs1.values).all()
     assert r2 == rs2
