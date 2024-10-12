@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import scipy.sparse
 from anndata import AnnData
 from loguru import logger
 from pandas import DataFrame, Series
@@ -73,10 +74,6 @@ def _calculate_cluster_range(number_of_cell_types: int) -> tuple[int, int]:
     cluster_factor = 3
     if number_of_cell_types > 12:
         cluster_factor = 4
-    if number_of_cell_types > 20:
-        cluster_factor = 6
-    if number_of_cell_types > 50:
-        cluster_factor = 10
     min_number_clusters = max(
         3, number_of_cell_types - cluster_factor
     )  # we don't want to cluster too many cell types together, depending on the number of cell types
@@ -134,39 +131,25 @@ def _run_deseq2(
 ) -> dict[str | int, pd.DataFrame]:
     results = {}
     inference = DefaultInference(n_cpus=n_cpus)
-    number_of_celltypes = len(countsig.columns)
-    cells_per_celltype = [np.sum(annotations == cell_type) for cell_type in countsig.columns]
+    bootstrapped_signature = _create_bootstrap_signature(countsig, sc_data, annotations)
     np.random.seed(42)
-    for i, cell_type in enumerate(countsig.columns):
+    for _i, cell_type in enumerate(countsig.columns):
+        bootstrapped_signature_copy = bootstrapped_signature.copy()
         countsig_copy = countsig.copy()
-
         sc_data_filtered = sc_data.T[annotations == cell_type]
         expressed_cells = (sc_data_filtered > 0).sum(axis=0)
         if expressed_cells.ndim > 1:  # needed for sparse matrices
             expressed_cells = np.squeeze(np.asarray(expressed_cells))
             # make dense out of sparse
             sc_data_filtered = sc_data_filtered.toarray()
-
-        number_of_bootstraps = min(number_of_celltypes - 2, 4)
-        number_of_bootstraps = max(number_of_bootstraps, 1)
-        print(f"Number of bootstraps: {number_of_bootstraps}")
-        rows_to_collect = min(int(np.mean(cells_per_celltype) / (number_of_bootstraps * 2)), 50)
-        for j in range(number_of_bootstraps):
-            selected_rows = np.random.choice(len(sc_data_filtered), rows_to_collect, replace=True)
-            summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
-            countsig_copy[f"{cell_type}_bootstrapped_{j}"] = list(summed_rows)
-
         threshold = gene_expression_threshold * sc_data_filtered.shape[0]
         genes = countsig_copy.index[expressed_cells > threshold].tolist()
-        count_df_filtered = countsig_copy.loc[genes].T
+        bootstrapped_signature_copy = bootstrapped_signature_copy.loc[genes].T
         logger.info(f"Running DE analysis for {cell_type}")
-        condition = np.array(["A"] * len(countsig_copy.columns))
-        condition[i] = "B"
-        condition[number_of_celltypes:] = "B"
-
-        clinical_df = pd.DataFrame({"condition": condition}, index=countsig_copy.columns)
+        condition = ["B" if (cell_type + "_") in x else "A" for x in bootstrapped_signature_copy.index]
+        clinical_df = pd.DataFrame({"condition": condition}, index=bootstrapped_signature_copy.index)
         dds = DeseqDataSet(
-            counts=count_df_filtered,
+            counts=bootstrapped_signature_copy,
             metadata=clinical_df,
             design_factors="condition",
             quiet=True,
@@ -180,6 +163,23 @@ def _run_deseq2(
         results[cell_type] = stat_res.results_df
 
     return results
+
+
+def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
+    if scipy.sparse.issparse(sc_data):
+        sc_data = sc_data.toarray()
+    celltypes = countsig.columns
+    bootstrapped_signature = pd.DataFrame()
+    number_of_bootstraps = 5
+    samples_per_bootstrap = 250
+    for celltype in celltypes:
+        sc_data_filtered = sc_data.T[annotations == celltype]
+        for i in range(number_of_bootstraps):
+            selected_rows = np.random.choice(len(sc_data_filtered), samples_per_bootstrap, replace=True)
+            summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
+            bootstrapped_signature[f"{celltype}_{i}"] = list(summed_rows)
+    bootstrapped_signature.index = countsig.index
+    return bootstrapped_signature
 
 
 def _de_analysis(
@@ -411,8 +411,8 @@ def _optimize_parameters(
     sc_data: pd.DataFrame, annotations: pd.Series, pseudo_signature_counts: pd.DataFrame, de_results, genes=None
 ) -> pd.DataFrame:
     # search space for p and lfc
-    lfcs = [x / 100 for x in range(150, 230, 10)]
-    ps = [x / 1000 for x in range(50, 51, 1)]
+    lfcs = [x / 100 for x in range(160, 230, 10)]
+    ps = [x / 1000 for x in range(100, 101, 1)]
 
     results = []
     logger.info("generating pseudo bulks")

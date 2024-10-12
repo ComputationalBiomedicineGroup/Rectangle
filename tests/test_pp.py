@@ -11,6 +11,7 @@ from rectanglepy.pp.create_signature import (
     _calculate_cluster_range,
     _create_annotations_from_cluster_labels,
     _create_bias_factors,
+    _create_bootstrap_signature,
     _create_fclusters,
     _create_linkage_matrix,
     _create_pseudo_count_sig,
@@ -240,3 +241,14 @@ def test_build_rectangle_signatures_even(small_data):
     )
 
     assert results_even.bias_factors.equals(results_uneven.bias_factors)
+
+
+def test_create_bootstrap_signature(small_data):
+    bootstraps_per_cell = 5
+    sc_counts, annotations, bulk = small_data
+    sc_counts = sc_counts.astype("int")
+    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
+    bootstrap = _create_bootstrap_signature(sc_pseudo, adata.X.T, annotations)
+
+    assert len(bootstrap.columns) == len(sc_pseudo.columns) * bootstraps_per_cell
