@@ -412,7 +412,7 @@ def _optimize_parameters(
 ) -> pd.DataFrame:
     # search space for p and lfc
     lfcs = [x / 100 for x in range(160, 230, 10)]
-    ps = [x / 1000 for x in range(100, 101, 1)]
+    ps = [x / 1000 for x in range(50, 51, 1)]
 
     results = []
     logger.info("generating pseudo bulks")
