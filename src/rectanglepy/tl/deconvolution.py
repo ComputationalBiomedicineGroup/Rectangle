@@ -180,7 +180,6 @@ def deconvolution(
         A DataFrame containing the estimated cell fractions resulting from deconvolution. Each row represents a sample and each column represents a cell type.
 
     """
-    bulks = bulks.loc[:, _filter_genes(bulks.columns)]
     bulks = bulks.div(bulks.sum(axis=1), axis=0) * 1e6
 
     if n_cpus is not None:
@@ -226,7 +225,7 @@ def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_
     bias_factors = signatures.bias_factors
 
     if not correct_mrna_bias:
-        bias_factors = bias_factors * 0 + 1
+        bias_factors = bias_factors * 0 + 1  # set all bias factors to 1
 
     signature = pseudobulk_sig_cpm.loc[signature_genes_direct_reduced] * bias_factors
     start_fractions = _calculate_dwls(signature, bulk)
@@ -245,36 +244,30 @@ def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_
     ]
     clustered_signature = clustered_pseudobulk_sig_cpm.loc[clustered_signature_genes] * cluster_bias_factors
 
-    union_genes = list(set(signature_genes_direct_reduced) | set(clustered_signature_genes))
-    union_direct_signature = pseudobulk_sig_cpm.loc[union_genes] * bias_factors
-
     try:
         clustered_fractions = _calculate_dwls(clustered_signature, bulk)
         recursive_fractions = _calculate_dwls(signature, bulk, signatures.assignments, clustered_fractions)
     except Exception as e:
         logger.warning(f"Recursive deconvolution failed with error: {e}")
+        start_fractions = correct_for_unknown_cell_content(bulk, pseudobulk_sig_cpm, start_fractions, bias_factors)
         return start_fractions
-
-    union_direct_fraction = _calculate_dwls(union_direct_signature, bulk)
-
-    averaged_start_fractions = (start_fractions + union_direct_fraction) / 2
 
     final_fractions = []
 
-    low_number_threshold = 30
+    low_number_threshold = 20
     cell_types_with_low_number_of_marker_genes = [
         cell_type
         for cell_type, num_marker_genes in signatures.marker_genes_per_cell_type.items()
         if len(num_marker_genes) < low_number_threshold
     ]
 
-    for cell_type in list(averaged_start_fractions.index):
+    for cell_type in list(start_fractions.index):
         if cell_type in cell_types_with_low_number_of_marker_genes:
             final_fractions.append(recursive_fractions[cell_type])
         else:
-            final_fractions.append(averaged_start_fractions[cell_type])
+            final_fractions.append(start_fractions[cell_type])
 
-    final_fractions = pd.Series(final_fractions, index=averaged_start_fractions.index)
+    final_fractions = pd.Series(final_fractions, index=start_fractions.index)
 
     final_fractions = correct_for_unknown_cell_content(bulk, pseudobulk_sig_cpm, final_fractions, bias_factors)
     return final_fractions
@@ -321,6 +314,8 @@ def correct_for_unknown_cell_content(
         estimates_fix.loc["Unknown"] = 0
         return estimates_fix
 
+    signature_genes = pseudo_signature_cpm.index
+    bulk = bulk.loc[signature_genes]
     signature = pseudo_signature_cpm.sort_index()
     bulk = bulk.sort_index()
 
@@ -333,7 +328,7 @@ def correct_for_unknown_cell_content(
     # Calculate the unknown cellular content ad the difference of
     # per-sample overall expression levels in the true vs. reconstructed
     # bulk RNA-seq data, divided by the overall expression in the true bulk
-    ukn_cc = (bulk - bulk_est).sum() / (bulk.sum())
+    ukn_cc = (bulk.sum() - bulk_est.sum()) / (bulk.sum())
     ukn_cc = max(0, ukn_cc)
     # Correct (i.e. scale) the cell fraction estimates so that their sum
     # equals 1 - the unknown cellular content estimated above
@@ -341,12 +336,3 @@ def correct_for_unknown_cell_content(
     estimates_fix.loc["Unknown"] = abs(ukn_cc)
 
     return estimates_fix
-
-
-# TODO move to utils
-def _filter_genes(genes: [str]) -> [str]:
-    # remove Ribosomal genes
-    genes = [gene for gene in genes if not gene.startswith("RB")]
-    genes = [gene for gene in genes if not gene.startswith("Rb")]
-
-    return genes

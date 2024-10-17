@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "rectanglepy"
-version = "0.1.8"
+version = "0.3.0"
 description = "Hierarchical deconvolution of bulk  transcriptomics"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,11 +19,12 @@ urls.Documentation = "https://rectanglepy.readthedocs.io/"
 urls.Source = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 urls.Home-page = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 dependencies = [
-    "pydeseq2==0.4.1",
+    "pydeseq2==0.4.11",
     "quadprog==0.1.12",
     "loguru",
     "numpy>=1.0.0,<2.0.0",
     "anndata>=0.8.0,<0.10.9",
+    "statsmodels>=0.14.1"
 ]
 
 [project.optional-dependencies]

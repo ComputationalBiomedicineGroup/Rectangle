@@ -39,6 +39,7 @@ def rectangle_consens(
     p=0.015,
     lfc=1.5,
     n_cpus: int = None,
+    gene_expression_threshold=0.5,
 ) -> tuple[DataFrame, RectangleSignatureResult, ConsensusResult]:
     r"""All in one deconvolution method. Creates signatures and deconvolutes the bulk data. Has options for subsampling and consensus runs.
 
@@ -70,6 +71,8 @@ def rectangle_consens(
         The number of cpus to use for the DE analysis. None value takes all cpus available.
     correct_mrna_bias : bool
         A flag indicating whether to correct for mRNA bias. Defaults to True.
+    gene_expression_threshold : float
+        The threshold for gene expression. Genes with expression below this threshold are removed from the analysis.
 
     Returns
     -------
@@ -103,6 +106,7 @@ def rectangle_consens(
             subsample=subsample,
             sample_size=sample_size,
             run=i,
+            gene_expression_threshold=gene_expression_threshold,
         )
         most_recent_signatures = signatures
         cell_fractions = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
@@ -130,6 +134,7 @@ def rectangle(
     p=0.015,
     lfc=1.5,
     n_cpus: int = None,
+    gene_expression_threshold=0.5,
 ) -> tuple[DataFrame, RectangleSignatureResult]:
     r"""All in one deconvolution method. Creates signatures and deconvolutes the bulk data. Has options for subsampling and consensus runs.
 
@@ -155,6 +160,8 @@ def rectangle(
         The number of cpus to use for the DE analysis. None value takes all cpus available.
     correct_mrna_bias : bool
         A flag indicating whether to correct for mRNA bias. Defaults to True.
+    gene_expression_threshold : float
+        The threshold for gene expression. Genes with expression below this threshold are removed from the analysis.
 
     Returns
     -------
@@ -175,6 +182,7 @@ def rectangle(
         p=p,
         lfc=lfc,
         n_cpus=n_cpus,
+        gene_expression_threshold=gene_expression_threshold,
     )
     return estimations, signatures
 

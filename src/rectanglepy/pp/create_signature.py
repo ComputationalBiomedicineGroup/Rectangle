@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+import scipy.sparse
 from anndata import AnnData
 from loguru import logger
 from pandas import DataFrame, Series
 from pydeseq2.dds import DeseqDataSet
+from pydeseq2.default_inference import DefaultInference
 from pydeseq2.ds import DeseqStats
 from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.stats import pearsonr
@@ -31,8 +33,8 @@ def _create_condition_number_matrices(de_adjusted, pseudo_signature):
     de_adjusted_lengths = {annotation: len(de_adjusted[annotation]) for annotation in de_adjusted}
     longest_de_analysis = max(de_adjusted_lengths.values())
 
-    loop_range = min(longest_de_analysis, 200)
-    range_minimum = 30
+    loop_range = min(longest_de_analysis, 80)
+    range_minimum = 20
 
     # should the data be too small we need to adjust the range, mainly for testing purposes
     if loop_range < 8:
@@ -72,10 +74,6 @@ def _calculate_cluster_range(number_of_cell_types: int) -> tuple[int, int]:
     cluster_factor = 3
     if number_of_cell_types > 12:
         cluster_factor = 4
-    if number_of_cell_types > 20:
-        cluster_factor = 6
-    if number_of_cell_types > 50:
-        cluster_factor = 10
     min_number_clusters = max(
         3, number_of_cell_types - cluster_factor
     )  # we don't want to cluster too many cell types together, depending on the number of cell types
@@ -122,45 +120,81 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
     de_analysis_result["log2_fc"] = de_analysis_result["log2FoldChange"]
     de_analysis_result["gene"] = de_analysis_result.index
     adjusted_result = de_analysis_result[
-        (de_analysis_result["pvalue"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
+        (de_analysis_result["padj"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
     ]
-    # for celltypes with low number of marker genes increase p-value and decrease log2FC until genes are found or the threshold is reached
-    while len(adjusted_result) < 10 and (min_log2FC > 0.5 and max_p < 0.05):
-        min_log2FC = max(min_log2FC - 0.1, 0.5)
-        max_p = min(max_p + 0.001, 0.05)
-        adjusted_result = de_analysis_result[
-            (de_analysis_result["pvalue"] < max_p) & (de_analysis_result["log2_fc"] > min_log2FC)
-        ]
 
     return adjusted_result
 
 
-def _run_deseq2(countsig: pd.DataFrame, n_cpus: int = None) -> dict[str | int, pd.DataFrame]:
+def _run_deseq2(
+    countsig: pd.DataFrame, sc_data, annotations: pd.Series, n_cpus: int = None, gene_expression_threshold=0.5
+) -> dict[str | int, pd.DataFrame]:
     results = {}
-    count_df = countsig[countsig.sum(axis=1) > 0].T
-    for i, cell_type in enumerate(countsig.columns):
+    inference = DefaultInference(n_cpus=n_cpus)
+    bootstrapped_signature = _create_bootstrap_signature(countsig, sc_data, annotations)
+    np.random.seed(42)
+    for _i, cell_type in enumerate(countsig.columns):
+        bootstrapped_signature_copy = bootstrapped_signature.copy()
+        countsig_copy = countsig.copy()
+        sc_data_filtered = sc_data.T[annotations == cell_type]
+        expressed_cells = (sc_data_filtered > 0).sum(axis=0)
+        if expressed_cells.ndim > 1:  # needed for sparse matrices
+            expressed_cells = np.squeeze(np.asarray(expressed_cells))
+            # make dense out of sparse
+            sc_data_filtered = sc_data_filtered.toarray()
+        threshold = gene_expression_threshold * sc_data_filtered.shape[0]
+        genes = countsig_copy.index[expressed_cells > threshold].tolist()
+        bootstrapped_signature_copy = bootstrapped_signature_copy.loc[genes].T
         logger.info(f"Running DE analysis for {cell_type}")
-        condition = np.zeros(len(countsig.columns))
-        condition[i] = 1
-        clinical_df = pd.DataFrame({"condition": condition}, index=countsig.columns)
-        dds = DeseqDataSet(counts=count_df, metadata=clinical_df, design_factors="condition", quiet=True, n_cpus=n_cpus)
+        condition = ["B" if (cell_type + "_") in x else "A" for x in bootstrapped_signature_copy.index]
+        clinical_df = pd.DataFrame({"condition": condition}, index=bootstrapped_signature_copy.index)
+        dds = DeseqDataSet(
+            counts=bootstrapped_signature_copy,
+            metadata=clinical_df,
+            design_factors="condition",
+            quiet=True,
+            inference=inference,
+            refit_cooks=False,
+        )
         dds.deseq2()
-        dds.varm["LFC"] = dds.varm["LFC"].round(4)
-        dds.varm["dispersions"] = dds.varm["dispersions"].round(3)
-
-        stat_res = DeseqStats(dds, n_cpus=n_cpus, quiet=True)
+        stat_res = DeseqStats(dds, inference=inference, quiet=True, cooks_filter=False)
         stat_res.summary(quiet=True)
-        stat_res.lfc_shrink()
+        stat_res.lfc_shrink("condition_B_vs_A")
         results[cell_type] = stat_res.results_df
 
     return results
 
 
+def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
+    if scipy.sparse.issparse(sc_data):
+        sc_data = sc_data.toarray()
+    celltypes = countsig.columns
+    bootstrapped_signature = pd.DataFrame()
+    number_of_bootstraps = 5
+    samples_per_bootstrap = 250
+    for celltype in celltypes:
+        sc_data_filtered = sc_data.T[annotations == celltype]
+        for i in range(number_of_bootstraps):
+            selected_rows = np.random.choice(len(sc_data_filtered), samples_per_bootstrap, replace=True)
+            summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
+            bootstrapped_signature[f"{celltype}_{i}"] = list(summed_rows)
+    bootstrapped_signature.index = countsig.index
+    return bootstrapped_signature
+
+
 def _de_analysis(
-    pseudo_count_sig, sc_data, annotations, p, lfc, optimize_cutoffs: bool, n_cpus: int = None, genes=None
+    pseudo_count_sig,
+    sc_data,
+    annotations: pd.Series,
+    p,
+    lfc,
+    optimize_cutoffs: bool,
+    n_cpus: int = None,
+    genes=None,
+    gene_expression_threshold=0.5,
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
-    deseq_results = _run_deseq2(pseudo_count_sig, n_cpus)
+    deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus, gene_expression_threshold)
     optimization_results = None
 
     if optimize_cutoffs:
@@ -189,6 +223,9 @@ def _get_marker_genes(deseq_results, logfc, p, pseudo_count_sig):
 
     markers = optimal_condition_matrix.index
     marker_genes_per_cell_type = _get_marker_genes_per_cell_type(de_analysis_adjusted, optimal_condition_number)
+    flattened_markers = [item for sublist in marker_genes_per_cell_type.values() for item in sublist]
+    duplicated_markers = [x for x in flattened_markers if flattened_markers.count(x) > 1]
+    print("duplicated markers: ", duplicated_markers)
     return markers, marker_genes_per_cell_type
 
 
@@ -249,6 +286,7 @@ def build_rectangle_signatures(
     sample_size: int = 1500,
     n_cpus: int = None,
     run: int = 0,
+    gene_expression_threshold=0.5,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
 
@@ -278,6 +316,8 @@ def build_rectangle_signatures(
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
     run
         The consensus run number for the analysis. Defaults to 0.
+    gene_expression_threshold
+        The gene expression threshold for the DE analysis. How many cells need to express a gene to be considered in DGE
 
     Returns
     -------
@@ -285,7 +325,6 @@ def build_rectangle_signatures(
     """
     annotations = adata.obs[cell_type_col]
     adata = adata[:, adata.X.sum(axis=0) > len(annotations.value_counts())]
-    adata = adata[:, _filter_genes(adata.var_names)]
 
     if bulks is not None:
         genes = list(set(bulks.columns) & set(adata.var_names))
@@ -313,7 +352,7 @@ def build_rectangle_signatures(
     m_rna_biasfactors = _create_bias_factors(pseudo_sig_counts, sc_counts, annotations)
 
     marker_genes, marker_genes_per_cell_type, optimization_result = _de_analysis(
-        pseudo_sig_counts, sc_counts, annotations, p, lfc, optimize_cutoffs, n_cpus, genes
+        pseudo_sig_counts, sc_counts, annotations, p, lfc, optimize_cutoffs, n_cpus, genes, gene_expression_threshold
     )
     pseudo_sig_cpm = _convert_to_cpm(pseudo_sig_counts)
     logger.info("Starting rectangle cluster analysis")
@@ -333,7 +372,13 @@ def build_rectangle_signatures(
 
     clustered_biasfact = _create_bias_factors(clustered_signature, sc_counts, clustered_annotations)
     clustered_genes, clustered_marker_genes_per_cell_type, _ = _de_analysis(
-        clustered_signature, sc_counts, clustered_annotations, p, lfc, False
+        clustered_signature,
+        sc_counts,
+        clustered_annotations,
+        p,
+        lfc,
+        False,
+        gene_expression_threshold=gene_expression_threshold,
     )
     clustered_signature = _convert_to_cpm(clustered_signature)
     return RectangleSignatureResult(
@@ -366,8 +411,8 @@ def _optimize_parameters(
     sc_data: pd.DataFrame, annotations: pd.Series, pseudo_signature_counts: pd.DataFrame, de_results, genes=None
 ) -> pd.DataFrame:
     # search space for p and lfc
-    lfcs = [x / 100 for x in range(140, 200, 10)]
-    ps = [x / 1000 for x in range(15, 20, 1)]
+    lfcs = [x / 100 for x in range(160, 230, 10)]
+    ps = [x / 1000 for x in range(50, 51, 1)]
 
     results = []
     logger.info("generating pseudo bulks")
@@ -473,11 +518,3 @@ def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
         cells = np.random.choice(cells, min(number, len(cells)), replace=False)
         selected_cells.extend(cells)
     return annotations.loc[selected_cells]
-
-
-def _filter_genes(genes: [str]) -> [str]:
-    # remove Ribosomal genes
-    genes = [gene for gene in genes if not gene.startswith("RB")]
-    genes = [gene for gene in genes if not gene.startswith("Rb")]
-
-    return genes
