@@ -311,7 +311,7 @@ def correct_for_unknown_cell_content(
     if estimates.sum() == 0:
         estimates_fix = estimates
         # analysis fails if all cell fractions are zero, so we set the unknown cell content to ß
-        estimates_fix.loc["Unknown"] = 0
+        estimates_fix["Unknown"] = 0
         return estimates_fix
 
     signature_genes = pseudo_signature_cpm.index
@@ -333,6 +333,6 @@ def correct_for_unknown_cell_content(
     # Correct (i.e. scale) the cell fraction estimates so that their sum
     # equals 1 - the unknown cellular content estimated above
     estimates_fix = estimates / estimates.sum() * (1 - ukn_cc)
-    estimates_fix.loc["Unknown"] = abs(ukn_cc)
+    estimates_fix["Unknown"] = abs(ukn_cc)
 
     return estimates_fix
