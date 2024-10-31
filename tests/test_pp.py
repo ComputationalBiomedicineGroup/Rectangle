@@ -243,7 +243,7 @@ def test_build_rectangle_signatures_even(small_data):
 
 
 def test_create_bootstrap_signature(small_data):
-    bootstraps_per_cell = 5
+    bootstraps_per_cell = 7
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
     sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
