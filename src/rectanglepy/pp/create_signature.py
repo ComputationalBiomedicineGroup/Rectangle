@@ -180,7 +180,7 @@ def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
             bootstrapped_signature[f"{celltype}_{i}"] = list(summed_rows)
     bootstrapped_signature.index = countsig.index
     # to int
-    samples_per_bootstrap = samples_per_bootstrap / 2
+    samples_per_bootstrap = samples_per_bootstrap / 2.5
     bootstrapped_signature = bootstrapped_signature.astype(int)
     return bootstrapped_signature
 
