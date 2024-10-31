@@ -170,8 +170,8 @@ def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
         sc_data = sc_data.toarray()
     celltypes = countsig.columns
     bootstrapped_signature = pd.DataFrame()
-    number_of_bootstraps = 5
-    samples_per_bootstrap = 250
+    number_of_bootstraps = 7
+    samples_per_bootstrap = 500
     for celltype in celltypes:
         sc_data_filtered = sc_data.T[annotations == celltype]
         for i in range(number_of_bootstraps):
@@ -179,6 +179,9 @@ def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
             summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
             bootstrapped_signature[f"{celltype}_{i}"] = list(summed_rows)
     bootstrapped_signature.index = countsig.index
+    # to int
+    samples_per_bootstrap = samples_per_bootstrap / 2
+    bootstrapped_signature = bootstrapped_signature.astype(int)
     return bootstrapped_signature
 
 
