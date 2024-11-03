@@ -111,7 +111,10 @@ def rectangle_consens(
         most_recent_signatures = signatures
         cell_fractions = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
         estimations.append(cell_fractions)
-        unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
+        if "Unknown" in cell_fractions.columns:
+            unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
+        else:
+            unkn_gene_corr = None
         signatures.unkn_gene_corr = unkn_gene_corr
         rectangle_signature_results.append(signatures)
     consensus_estimations = pd.concat(estimations).groupby(level=0).median()
