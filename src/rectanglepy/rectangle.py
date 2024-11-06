@@ -121,6 +121,7 @@ def rectangle_consens(
 
     # normalize the estimations to 1, needed for the consensus
     consensus_estimations = consensus_estimations.div(consensus_estimations.sum(axis=1), axis=0)
+    consensus_estimations[consensus_estimations < 0] = 0
     consensus_results = ConsensusResult(estimations, rectangle_signature_results)
     return consensus_estimations, most_recent_signatures, consensus_results
 
