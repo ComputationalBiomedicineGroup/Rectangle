@@ -112,7 +112,11 @@ def rectangle_consens(
         cell_fractions = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
         estimations.append(cell_fractions)
         if "Unknown" in cell_fractions.columns:
-            unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
+            try:
+                unkn_gene_corr = _genes_linked_to_unkn(bulks, cell_fractions["Unknown"])
+            except Exception as e:
+                logger.warning(f"Could not calculate gene correlation with unknown cell type: {e}")
+                unkn_gene_corr = None
         else:
             unkn_gene_corr = None
         signatures.unkn_gene_corr = unkn_gene_corr
