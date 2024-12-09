@@ -215,7 +215,7 @@ def load_tutorial_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
 
 
 def _genes_linked_to_unkn(bulks: DataFrame, unkn_fractions: pd.Series):
-    genes = bulks.columns
+    genes = bulks.columns.drop_duplicates()
     corr = []
     for gene in genes:
         corr.append(unkn_fractions.corr(bulks.loc[:, gene]))
