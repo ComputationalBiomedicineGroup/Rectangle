@@ -104,7 +104,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = "sphinx_book_theme"
+html_theme = "furo"
 html_static_path = ["_static"]
 html_title = "rectangle"
 
@@ -113,16 +113,6 @@ html_theme_options = {
     "use_repository_button": True,
     "path_to_docs": "docs/",
 }
-
-pygments_style = "emacs"
-
-nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
-]
-
-print("Pygments style:", pygments_style)
 
 
 def setup(app):

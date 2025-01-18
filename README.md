@@ -25,7 +25,7 @@ Python installed, we recommend installing [Mambaforge](https://github.com/conda-
 
 How to install Rectangle:
 
-Install the latest release of `Rectangle` from `PyPI <https://pypi.org/project/rectanglepy/>`:
+Install the latest release of `Rectangle` from `PyPI` <https://pypi.org/project/rectanglepy/>:
 
 ```bash
 pip install rectanglepy

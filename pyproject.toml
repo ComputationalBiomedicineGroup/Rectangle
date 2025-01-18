@@ -25,6 +25,7 @@ dependencies = [
     "numpy>=1.0.0,<2.0.0",
     "anndata>=0.8.0,<0.10.9",
     "statsmodels>=0.14.1"
+
 ]
 
 [project.optional-dependencies]
@@ -34,15 +35,16 @@ dev = [
     "twine>=4.0.2"
 ]
 doc = [
-    "sphinx>=4",
-    "sphinx-book-theme>=1.0.0",
+    "sphinx",
+    "sphinx-book-theme",
     "myst-nb",
-    "sphinxcontrib-bibtex>=1.0.0",
+    "sphinxcontrib-bibtex",
     "sphinx-autodoc-typehints",
     # For notebooks
     "ipykernel",
     "ipython",
     "sphinx-copybutton",
+    "furo",
 ]
 test = [
     "pytest",

@@ -16,7 +16,6 @@ from rectanglepy.pp.create_signature import (
     _create_linkage_matrix,
     _create_pseudo_count_sig,
     _de_analysis,
-    _even,
     _generate_pseudo_bulks,
     _get_fcluster_assignments,
     _run_deseq2,
@@ -207,39 +206,6 @@ def test_de_analysis(small_data):
 
     assert 5 < len(r1) < 50
     assert len(r2) == 3
-
-
-def test_even(small_data):
-    sc_data, annotations, _ = small_data
-    even_annotation = _even(annotations, 20)
-    assert len(even_annotation) == 51
-    counts = annotations.loc[even_annotation.index].value_counts()
-    assert counts.equals(pd.Series({"T cell CD4": 20, "T cell CD8": 20, "NK cell": 11}))
-
-    even_sc_data = sc_data.loc[:, _even(annotations, 100).index]
-
-    assert round(even_sc_data.sum().sum(), 3) == round(sc_data.sum().sum(), 3)
-
-
-def test_build_rectangle_signatures_even(small_data):
-    sc_counts, annotations, bulk = small_data
-    sc_counts = sc_counts.astype("int")
-    adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
-    results_even = build_rectangle_signatures(
-        adata,
-        "cell_type",
-        bulks=bulk.T,
-        p=0.5,
-        lfc=0.1,
-        optimize_cutoffs=False,
-        subsample=True,
-        sample_size=1000,
-    )
-    results_uneven = build_rectangle_signatures(
-        adata, "cell_type", bulks=bulk.T, p=0.5, lfc=0.1, optimize_cutoffs=False
-    )
-
-    assert results_even.bias_factors.equals(results_uneven.bias_factors)
 
 
 def test_create_bootstrap_signature(small_data):

@@ -7,48 +7,6 @@ information to get you started on contributing.
 We assume that you are already familiar with git and with making pull requests on GitHub. If not, please refer
 to the [scanpy developer guide][].
 
-## Installing dev dependencies
-
-In addition to the packages needed to _use_ this package, you need additional python packages to _run tests_ and _build
-the documentation_. It's easy to install them using `pip`:
-
-```bash
-cd Rectangle
-pip install -e ".[dev,test,doc]"
-```
-
-## Code-style
-
-This template uses [pre-commit][] to enforce consistent code-styles. On every commit, pre-commit checks will either
-automatically fix issues with the code, or raise an error message. See [pre-commit checks](template_usage.md#pre-commit-checks) for
-a full list of checks enabled for this repository.
-
-To enable pre-commit locally, simply run
-
-```bash
-pre-commit install
-```
-
-in the root of the repository. Pre-commit will automatically download all dependencies when it is run for the first time.
-
-Alternatively, you can rely on the [pre-commit.ci][] service enabled on GitHub. If you didn't run `pre-commit` before
-pushing changes to GitHub it will automatically commit fixes to your pull request, or show an error message.
-
-If pre-commit.ci added a commit on a branch you still have been working on locally, simply use
-
-```bash
-git pull --rebase
-```
-
-to integrate the changes into yours.
-While the [pre-commit.ci][] is useful, we strongly encourage installing and running pre-commit locally first to understand its usage.
-
-Finally, most editors have an _autoformat on save_ feature. Consider enabling this option for [black][black-editors]
-and [prettier][prettier-editors].
-
-[black-editors]: https://black.readthedocs.io/en/stable/integrations/editors.html
-[prettier-editors]: https://prettier.io/docs/en/editors.html
-
 ## Writing tests
 
 ```{note}
@@ -101,38 +59,6 @@ git push --tags
 to publish the created tag on GitHub.
 
 [bump2version]: https://github.com/c4urself/bump2version
-
-### Building and publishing the package on PyPI
-
-Python packages are not distributed as source code, but as _distributions_. The most common distribution format is the so-called _wheel_. To build a _wheel_, run
-
-```bash
-python -m build
-```
-
-This command creates a _source archive_ and a _wheel_, which are required for publishing your package to [PyPI][]. These files are created directly in the root of the repository.
-
-Before uploading them to [PyPI][] you can check that your _distribution_ is valid by running:
-
-```bash
-twine check dist/*
-```
-
-and finally publishing it with:
-
-```bash
-twine upload dist/*
-```
-
-Provide your username and password when requested and then go check out your package on [PyPI][]!
-
-For more information, follow the [Python packaging tutorial][].
-
-It is possible to automate this with GitHub actions, see also [this feature request][pypi-feature-request]
-in the cookiecutter-scverse template.
-
-[python packaging tutorial]: https://packaging.python.org/en/latest/tutorials/packaging-projects/#generating-distribution-archives
-[pypi-feature-request]: https://github.com/scverse/cookiecutter-scverse/issues/88
 
 ## Writing documentation
 

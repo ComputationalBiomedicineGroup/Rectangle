@@ -285,10 +285,7 @@ def build_rectangle_signatures(
     raw: bool = False,
     p=0.015,
     lfc=1.5,
-    subsample: bool = False,
-    sample_size: int = 1500,
     n_cpus: int = None,
-    run: int = 0,
     gene_expression_threshold=0.5,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
@@ -305,10 +302,6 @@ def build_rectangle_signatures(
         The Anndata layer to use for the single-cell data. Defaults to None.
     raw
         A flag indicating whether to use the raw Anndata data. Defaults to False.
-    subsample : bool
-        A flag indicating whether to balance the single-cell data. Defaults to False.
-    sample_size : int
-        The number of cells to balance the single-cell data to. Defaults to 1500. If cell number is less than this number it takes the original number of cells.
     optimize_cutoffs
         Indicates whether to optimize the p-value and log fold change cutoffs using gridsearch. Defaults to True.
     p
@@ -317,8 +310,6 @@ def build_rectangle_signatures(
         The log fold change threshold for the DE analysis (only used if optimize_cutoffs is False).
     n_cpus
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
-    run
-        The consensus run number for the analysis. Defaults to 0.
     gene_expression_threshold
         The gene expression threshold for the DE analysis. How many cells need to express a gene to be considered in DGE
 
@@ -335,10 +326,6 @@ def build_rectangle_signatures(
         assert len(genes) > 0, "No common genes between bulks and single-cell data"
         logger.info(f"Using {len(genes)} common genes between bulks and single-cell data")
         adata = adata[:, genes]
-
-    if subsample:
-        annotations = _even(annotations, sample_size, run)
-        adata = adata[annotations.index]
 
     if layer is not None:
         sc_counts = adata.layers[layer]
@@ -509,15 +496,3 @@ def _reduce_to_common_genes(bulks: pd.DataFrame, sc_data: pd.DataFrame):
     sc_data = sc_data.loc[genes].sort_index()
     bulks = bulks.loc[genes].sort_index()
     return bulks, sc_data
-
-
-def _even(annotations: pd.Series, number: int, run=0) -> pd.Series:
-    np.random.seed(run)
-    assert number > 0, "Number of cells must be greater than 0"
-    annotation_counts = annotations.value_counts()
-    selected_cells = []
-    for annotation in annotation_counts.index:
-        cells = annotations[annotations == annotation].index
-        cells = np.random.choice(cells, min(number, len(cells)), replace=False)
-        selected_cells.extend(cells)
-    return annotations.loc[selected_cells]
