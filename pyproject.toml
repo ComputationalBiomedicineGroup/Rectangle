@@ -20,6 +20,7 @@ urls.Source = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 urls.Home-page = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 dependencies = [
     "pydeseq2==0.4.11",
+    "scipy==1.13.0",
     "quadprog==0.1.12",
     "loguru",
     "numpy>=1.0.0,<2.0.0",
