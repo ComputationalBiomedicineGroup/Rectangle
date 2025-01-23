@@ -7,10 +7,11 @@
 [link-tests]: https://github.com/ComputationalBiomedicineGroup/Rectangle/actions/workflows/build.yaml
 [badge-docs]: https://img.shields.io/readthedocs/rectanglepy
 
-Rectangle embodies a ”second-generation” deconvolution methodology, setting itself apart from other second-generation
-methods through its efficiency in signature creation and its handling of challenges within the deconvolution process.
-To establish a precise deconvolution method, we employ a hierarchical analysis approach, incorporate mRNA bias
-correction, and provide an estimation of unknown cellular content.
+Rectangle is an open-source Python package developed for computational deconvolution
+Rectangle presents a novel approach to second-generation deconvolution, characterized by hierarchical processing,
+an estimation of unknown cellular content and a significant reduction in data volume during signature matrix computation.
+Rectangle was developed to outperform existing deconvolution solutions by introducing methods that promise
+improvements in cell-type fraction estimation accuracy while keeping a low computational profile.
 
 ## Getting started
 
@@ -20,7 +21,7 @@ Please refer to the [documentation][link-docs]. In particular, the
 
 ## Installation
 
-You need to have Python 3.10 or newer installed on your system. If you don't have
+You need to have Python 3.10 or higher installed on your system. If you don't have
 Python installed, we recommend installing [Mambaforge](https://github.com/conda-forge/miniforge#mambaforge).
 
 How to install Rectangle:
