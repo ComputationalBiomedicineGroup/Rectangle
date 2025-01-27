@@ -172,6 +172,7 @@ def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
     bootstrapped_signature = pd.DataFrame()
     number_of_bootstraps = 7
     samples_per_bootstrap = 500
+    np.random.seed(42)
     for celltype in celltypes:
         sc_data_filtered = sc_data.T[annotations == celltype]
         for i in range(number_of_bootstraps):
@@ -319,8 +320,10 @@ def build_rectangle_signatures(
     """
     annotations = adata.obs[cell_type_col]
     adata = adata[:, adata.X.sum(axis=0) > len(annotations.value_counts())]
+    assert adata.var_names.is_unique, "Duplicate gene found in adata"
 
     if bulks is not None:
+        assert bulks.columns.is_unique, "Duplicate gene found in bulks"
         genes = list(set(bulks.columns) & set(adata.var_names))
         genes = sorted(genes)
         assert len(genes) > 0, "No common genes between bulks and single-cell data"
