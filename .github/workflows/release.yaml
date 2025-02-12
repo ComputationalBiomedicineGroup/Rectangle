@@ -18,6 +18,10 @@ jobs:
                 include:
                     - os: ubuntu-latest
                       python: "3.10"
+                    - os: ubuntu-latest
+                      python: "3.11"
+                    - os: ubuntu-latest
+                      python: "3.12"
         env:
             OS: ${{ matrix.os }}
             PYTHON: ${{ matrix.python }}
@@ -49,10 +53,10 @@ jobs:
         needs: test
         steps:
             - uses: actions/checkout@v2
-            - name: Set up Python 3.10
+            - name: Set up Python 3.12
               uses: actions/setup-python@v2
               with:
-                  python-version: "3.10"
+                  python-version: "3.12"
             - name: Install build dependencies
               run: python -m pip install --upgrade pip wheel twine build
             - name: Build package
@@ -68,10 +72,10 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v3
 
-            - name: Set up Python 3.10
+            - name: Set up Python 3.12
               uses: actions/setup-python@v4
               with:
-                  python-version: "3.10"
+                  python-version: "3.12"
 
             - name: Install hatch
               run: pip install hatch
