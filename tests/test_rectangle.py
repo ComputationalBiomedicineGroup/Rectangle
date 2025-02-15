@@ -23,3 +23,4 @@ def test_rectangle():
     assert isinstance(estimations, pd.DataFrame)
     assert isinstance(signatures, RectangleSignatureResult)
     assert isinstance(signatures.unkn_gene_corr, pd.Series)
+    assert isinstance(signatures.unkn_bulk_err, pd.DataFrame)

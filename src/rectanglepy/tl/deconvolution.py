@@ -177,7 +177,13 @@ def deconvolution(
 
     Returns
     -------
-        A DataFrame containing the estimated cell fractions resulting from deconvolution. Each row represents a sample and each column represents a cell type.
+    estimation_df : pd.DataFrame
+        A DataFrame containing the estimated cell fractions. Each row represents
+        a sample, each column represents a cell type (including 'Unknown' if applicable).
+    bulk_err_df : pd.DataFrame
+        A DataFrame containing the gene-level difference between the true bulk
+        expression and the reconstructed bulk expression (i.e., `bulk - bulk_est`)
+        for each sample.
 
     """
     bulks = bulks.div(bulks.sum(axis=1), axis=0) * 1e6
@@ -194,28 +200,31 @@ def deconvolution(
             delayed(_process_bulk)(signatures, i, bulk, bulks.columns, correct_mrna_bias)
             for i, bulk in enumerate(bulks.values)
         )
+    estimations = [result[0] for result in results]
+    bulk_err = [result[1] for result in results]
+    estimation_df = pd.DataFrame(estimations, index=bulks.index)
+    bulk_err_df = pd.DataFrame(bulk_err, index=bulks.index)
 
-    result_df = pd.DataFrame(results, index=bulks.index)
-
-    # Return the result DataFrame
-    return result_df
+    return estimation_df, bulk_err_df
 
 
 def _process_bulk(
     signatures: RectangleSignatureResult, i: int, bulk: pd.Series, var_names: pd.Index, correct_mrna_bias: bool
-) -> pd.Series:
+) -> tuple[pd.Series, pd.Series]:
     try:
         logger.info(f"Deconvolute fractions for bulk: {i}")
         bulk = pd.Series(bulk, index=var_names)
-        result = _deconvolute(signatures, bulk, correct_mrna_bias=correct_mrna_bias)
+        estimations, bulk_err = _deconvolute(signatures, bulk, correct_mrna_bias=correct_mrna_bias)
         logger.info(f"Finished deconvolution for bulk: {i}")
-        return result
+        return estimations, bulk_err
     except Exception as e:
         logger.warning(f"Deconvolution failed for bulk: {i} with error: {e}")
-        return pd.Series(index=signatures.pseudobulk_sig_cpm.columns)
+        return pd.Series(index=signatures.pseudobulk_sig_cpm.columns), pd.Series(index=bulk.index)
 
 
-def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_mrna_bias: bool = True) -> pd.Series:
+def _deconvolute(
+    signatures: RectangleSignatureResult, bulk: pd.Series, correct_mrna_bias: bool = True
+) -> tuple[pd.Series, pd.Series]:
     bulk_direct_reduced = bulk[bulk.index.isin(signatures.signature_genes)]
     signature_genes_direct_reduced = signatures.signature_genes[
         signatures.signature_genes.isin(bulk_direct_reduced.index)
@@ -231,8 +240,10 @@ def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_
     start_fractions = _calculate_dwls(signature, bulk)
 
     if clustered_pseudobulk_sig_cpm is None:
-        start_fractions = correct_for_unknown_cell_content(bulk, pseudobulk_sig_cpm, start_fractions, bias_factors)
-        return start_fractions
+        start_fractions, bulk_err = correct_for_unknown_cell_content(
+            bulk, pseudobulk_sig_cpm, start_fractions, bias_factors
+        )
+        return start_fractions, bulk_err
 
     cluster_bias_factors = signatures.clustered_bias_factors
     if not correct_mrna_bias:
@@ -249,8 +260,10 @@ def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_
         recursive_fractions = _calculate_dwls(signature, bulk, signatures.assignments, clustered_fractions)
     except Exception as e:
         logger.warning(f"Recursive deconvolution failed with error: {e}")
-        start_fractions = correct_for_unknown_cell_content(bulk, pseudobulk_sig_cpm, start_fractions, bias_factors)
-        return start_fractions
+        start_fractions, bulk_err = correct_for_unknown_cell_content(
+            bulk, pseudobulk_sig_cpm, start_fractions, bias_factors
+        )
+        return start_fractions, bulk_err
 
     final_fractions = []
 
@@ -269,13 +282,15 @@ def _deconvolute(signatures: RectangleSignatureResult, bulk: pd.Series, correct_
 
     final_fractions = pd.Series(final_fractions, index=start_fractions.index)
 
-    final_fractions = correct_for_unknown_cell_content(bulk, pseudobulk_sig_cpm, final_fractions, bias_factors)
-    return final_fractions
+    final_fractions, bulk_err = correct_for_unknown_cell_content(
+        bulk, pseudobulk_sig_cpm, final_fractions, bias_factors
+    )
+    return final_fractions, bulk_err
 
 
 def correct_for_unknown_cell_content(
     bulk: pd.Series, pseudo_signature_cpm: pd.DataFrame, estimates: pd.Series, bias_factors: pd.Series
-) -> pd.Series:
+) -> tuple[pd.Series, pd.Series]:
     r"""Performs correction for unknown cell content using the pseudo signature and bulk data.
 
     Reconstructs the bulk expression profiles through  the estimated cell fractions (weighted by the mRNA bias factors) and cell-type-specific expression profiles (i.e. signature).
@@ -306,13 +321,17 @@ def correct_for_unknown_cell_content(
 
     Returns
     -------
-    pd.Series: The corrected cell fractions, indexed by cell type. Adds an "Unknown" cell type.
+    estimates_fix
+         The corrected cell fractions, indexed by cell type. Includes an "Unknown" cell type for the unknown cellular content.
+    bulk_err
+         The difference (per gene) between the actual bulk expression and the reconstructed bulk expression (i.e., `bulk - bulk_est`).
+
     """
     if estimates.sum() == 0:
         estimates_fix = estimates
         # analysis fails if all cell fractions are zero, so we set the unknown cell content to ß
         estimates_fix["Unknown"] = 0
-        return estimates_fix
+        return estimates_fix, pd.Series(index=bulk.index)
 
     signature_genes = pseudo_signature_cpm.index
     bulk = bulk.loc[signature_genes]
@@ -325,6 +344,8 @@ def correct_for_unknown_cell_content(
     bulk_est = pd.Series(np.dot(signature, (estimates.T * bias_factors).T))
     bulk_est.index = signature.index
 
+    bulk_err = bulk - bulk_est
+
     # Calculate the unknown cellular content ad the difference of
     # per-sample overall expression levels in the true vs. reconstructed
     # bulk RNA-seq data, divided by the overall expression in the true bulk
@@ -335,4 +356,4 @@ def correct_for_unknown_cell_content(
     estimates_fix = estimates / estimates.sum() * (1 - ukn_cc)
     estimates_fix["Unknown"] = abs(ukn_cc)
 
-    return estimates_fix
+    return estimates_fix, bulk_err

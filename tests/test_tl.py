@@ -77,8 +77,9 @@ def test_correct_for_unknown_cell_content(small_data, quantiseq_data):
     fractions = _calculate_dwls(sig, bulk)
     biasfact = (pseudo_signature > 0).sum(axis=0)
     biasfact = biasfact / biasfact.min()
-    result = correct_for_unknown_cell_content(bulk, pseudo_signature, fractions, biasfact)
+    result, bulk_err = correct_for_unknown_cell_content(bulk, pseudo_signature, fractions, biasfact)
     assert len(fractions) + 1 == len(result)
+    assert len(bulk_err) > 0
 
 
 def test_solve_dampened_wsl(quantiseq_data):
@@ -106,9 +107,10 @@ def test_deconvolute_no_hierarchy(small_data, quantiseq_data):
     signature = build_rectangle_signatures(adata, "cell_type", p=0.9, lfc=0.1, optimize_cutoffs=False)
     bulk, _, _ = quantiseq_data
 
-    estimations = deconvolution(signature, bulk.T)
+    estimations, bulk_err = deconvolution(signature, bulk.T)
     assert np.allclose(estimations.sum(axis=1), 1)
     assert estimations.shape == (8, 4)
+    assert len(bulk_err) == 8
 
 
 def test_deconvolute_sparse_no_hierarchy(small_data, quantiseq_data):
@@ -118,7 +120,7 @@ def test_deconvolute_sparse_no_hierarchy(small_data, quantiseq_data):
     signature = build_rectangle_signatures(adata, "cell_type", p=0.9, lfc=0.1, optimize_cutoffs=False)
     bulk, _, _ = quantiseq_data
 
-    expected = deconvolution(signature, bulk.T)
+    expected, bulk_err_exp = deconvolution(signature, bulk.T)
 
     sc_counts = sc_counts.astype(pd.SparseDtype("int"))
     csr_sparse_matrix = sc_counts.sparse.to_coo().tocsr()
@@ -127,5 +129,6 @@ def test_deconvolute_sparse_no_hierarchy(small_data, quantiseq_data):
     )
     signature_sparse = build_rectangle_signatures(adata_sparse, "cell_type", p=0.9, lfc=0.1, optimize_cutoffs=False)
 
-    estimations = deconvolution(signature_sparse, bulk.T)
+    estimations, bulk_err = deconvolution(signature_sparse, bulk.T)
     assert expected.equals(estimations)
+    assert bulk_err_exp.equals(bulk_err)
