@@ -70,7 +70,7 @@ def rectangle(
         gene_expression_threshold=gene_expression_threshold,
     )
 
-    estimations = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
+    estimations, bulk_err = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
 
     if "Unknown" in estimations.columns:
         try:
@@ -81,6 +81,7 @@ def rectangle(
     else:
         unkn_gene_corr = None
     signatures.unkn_gene_corr = unkn_gene_corr
+    signatures.unkn_bulk_err = bulk_err
 
     return estimations, signatures
 

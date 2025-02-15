@@ -24,6 +24,8 @@ class RectangleSignatureResult:
         The result of the p lfc cut off optimization, as a pd.DataFrame. Contains the following columns: p, lfc, pearson_r, rsme
     unkn_gene_corr
         The correlation between the unknown cell type and the genes linked to the unknown cell type.
+    unkn_bulk_err
+        The result of 'bulk - bulk_est' for the reconstructed bulk used to calculate the unknown cell type content.
     """
 
     def __init__(
@@ -39,6 +41,7 @@ class RectangleSignatureResult:
         clustered_signature_genes: pd.Series = None,
         cluster_assignments: list[int or str] = None,
         unkn_gene_corr: pd.Series = None,
+        unkn_bulk_err: pd.DataFrame = None,
     ):
         self.signature_genes = signature_genes
         self.bias_factors = bias_factors
@@ -51,6 +54,7 @@ class RectangleSignatureResult:
         self.clustered_signature_genes = clustered_signature_genes
         self.assignments = cluster_assignments
         self.unkn_gene_corr = unkn_gene_corr
+        self.unkn_bulk_err = unkn_bulk_err
 
     def get_signature_matrix(self, include_mrna_bias=True) -> pd.DataFrame:
         """Calculates the signature matrix by multiplying the pseudobulk_sig_cpm DataFrame subset by signature_genes and the bias_factors Series.
