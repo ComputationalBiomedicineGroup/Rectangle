@@ -71,17 +71,17 @@ def rectangle(
     )
 
     estimations, bulk_err = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
-
+    signatures.unkn_bulk_err = bulk_err
     if "Unknown" in estimations.columns:
         try:
-            unkn_gene_corr = _genes_linked_to_unkn(bulks, estimations["Unknown"])
+            unkn_gene_corr = _genes_linked_to_unkn(bulks, estimations["Unknown"], bulk_err)
         except Exception as e:
             logger.warning(f"Could not calculate gene correlation with unknown cell type: {e}")
             unkn_gene_corr = None
     else:
         unkn_gene_corr = None
+
     signatures.unkn_gene_corr = unkn_gene_corr
-    signatures.unkn_bulk_err = bulk_err
 
     return estimations, signatures
 
@@ -105,9 +105,19 @@ def load_tutorial_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return sc_counts.T, annotations, bulks.T
 
 
-def _genes_linked_to_unkn(bulks: DataFrame, unkn_fractions: pd.Series):
-    genes = bulks.columns.drop_duplicates()
-    corr = []
+def _genes_linked_to_unkn(bulks: DataFrame, unkn_fractions: pd.Series, bulk_err: DataFrame) -> pd.DataFrame:
+    genes = bulk_err.columns.drop_duplicates()
+    corr_expr = []
     for gene in genes:
-        corr.append(unkn_fractions.corr(bulks.loc[:, gene]))
-    return pd.Series(corr, index=genes).sort_values(ascending=False)
+        corr_expr.append(unkn_fractions.corr(bulks.loc[:, gene]))
+
+    corr_err = []
+    for gene in genes:
+        corr_err.append(unkn_fractions.corr(bulk_err.loc[:, gene]))
+
+    corr_expr = pd.Series(corr_expr, index=genes)
+    corr_err = pd.Series(corr_err, index=genes)
+
+    df = pd.DataFrame({"corr_expr": corr_expr, "corr_err": corr_err})
+
+    return df

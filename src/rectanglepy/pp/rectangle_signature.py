@@ -23,7 +23,7 @@ class RectangleSignatureResult:
     optimization_result
         The result of the p lfc cut off optimization, as a pd.DataFrame. Contains the following columns: p, lfc, pearson_r, rsme
     unkn_gene_corr
-        The correlation between the unknown cell type and the genes linked to the unknown cell type.
+        A Dataframe that contains the correlation of the estimated unknown cell content with the gene expression in the bulk samples, and the correlation of the estimated unknown cell content with the bulk error.
     unkn_bulk_err
         The result of 'bulk - bulk_est' for the reconstructed bulk used to calculate the unknown cell type content.
     """
@@ -40,7 +40,7 @@ class RectangleSignatureResult:
         marker_genes_per_cluster: dict[str, [str]] = None,
         clustered_signature_genes: pd.Series = None,
         cluster_assignments: list[int or str] = None,
-        unkn_gene_corr: pd.Series = None,
+        unkn_gene_corr: pd.DataFrame = None,
         unkn_bulk_err: pd.DataFrame = None,
     ):
         self.signature_genes = signature_genes
