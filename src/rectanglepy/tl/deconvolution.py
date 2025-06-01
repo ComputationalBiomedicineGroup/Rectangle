@@ -281,6 +281,7 @@ def _deconvolute(
             final_fractions.append(start_fractions[cell_type])
 
     final_fractions = pd.Series(final_fractions, index=start_fractions.index)
+    final_fractions = final_fractions.clip(lower=0)
 
     final_fractions, bulk_err = correct_for_unknown_cell_content(
         bulk, pseudobulk_sig_cpm, final_fractions, bias_factors

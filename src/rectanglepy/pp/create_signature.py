@@ -227,9 +227,6 @@ def _get_marker_genes(deseq_results, logfc, p, pseudo_count_sig):
 
     markers = optimal_condition_matrix.index
     marker_genes_per_cell_type = _get_marker_genes_per_cell_type(de_analysis_adjusted, optimal_condition_number)
-    flattened_markers = [item for sublist in marker_genes_per_cell_type.values() for item in sublist]
-    duplicated_markers = [x for x in flattened_markers if flattened_markers.count(x) > 1]
-    print("duplicated markers: ", duplicated_markers)
     return markers, marker_genes_per_cell_type
 
 
