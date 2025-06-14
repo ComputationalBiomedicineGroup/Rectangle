@@ -7,6 +7,7 @@
 :maxdepth: 1
 
 api.md
+installation.md
 notebooks/example
 changelog.md
 contributing.md

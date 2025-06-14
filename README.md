@@ -23,8 +23,7 @@ Please refer to the [documentation][link-docs]. In particular, the
 
 ## Installation
 
-You need to have Python 3.10 or higher installed on your system. If you don't have
-Python installed, we recommend installing [Mambaforge](https://github.com/conda-forge/miniforge#mambaforge).
+You need to have Python 3.10 or higher installed on your system.
 
 How to install Rectangle:
 
@@ -44,7 +43,7 @@ If you found a bug, please use the [issue tracker][issue-tracker].
 
 ## Citation
 
-> t.b.a
+If you use Rectangle in your research, please cite: [TBA]
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/ComputationalBiomedicineGroup/Rectangle/issues
