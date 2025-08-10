@@ -8,7 +8,7 @@
 
 api.md
 installation.md
-Tutorials <notebooks/example>
+tutorials.md
 changelog.md
 contributing.md
 references.md
