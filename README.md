@@ -19,6 +19,8 @@ If you use Rectangle in your project, please cite: (TBA).
 
 Please refer to the [documentation][link-docs]. In particular, the
 
+-   [Tutorials][link-docs/tutorials] for a step-by-step guide on how to use Rectangle, and the
+
 -   [API documentation][link-api].
 
 ## Installation
@@ -50,3 +52,4 @@ If you use Rectangle in your research, please cite: [TBA]
 [changelog]: https://rectanglepy.readthedocs.io/changelog.html
 [link-docs]: https://Rectanglepy.readthedocs.io
 [link-api]: https://rectanglepy.readthedocs.io/api.html
+[link-docs/tutorials]: https://rectanglepy.readthedocs.io/notebooks/example.html
