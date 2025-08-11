@@ -7,7 +7,7 @@
 [link-tests]: https://github.com/ComputationalBiomedicineGroup/Rectangle/actions/workflows/build.yaml
 [badge-docs]: https://img.shields.io/readthedocs/rectanglepy
 
-Rectangle is an open-source Python package for single-cell-informed cell-type deconvolution of bulk and spatial transcriptomic data, which is part of the [scverse ecosystem] (https://scverse.org/packages/).
+Rectangle is an open-source Python package for single-cell-informed cell-type deconvolution of bulk and spatial transcriptomic data, which is part of the [scverse ecosystem](https://scverse.org/packages/).
 
 Rectangle presents a novel approach to second-generation deconvolution, characterized by hierarchical signature building for fine-grained cell-type deconvolution, estimation and correction of unknown cellular content, and efficient handling of large-scale single-cell data during signature matrix computation.
 
