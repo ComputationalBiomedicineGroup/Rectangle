@@ -41,8 +41,8 @@ See the [changelog][changelog].
 
 If you found a bug, please use the [issue tracker][issue-tracker].
 
-> ## Citation
->
+## Citation
+
 > If you use Rectangle in your project, please cite: (TBA)
 
 [scverse-discourse]: https://discourse.scverse.org/
