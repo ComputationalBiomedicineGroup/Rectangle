@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [1.0.0] - 2025-08-14
+
+### Added
+
+-   Public release of Rectangle with full core functionalities and documentation for cell-type deconvolution.
+
 ## [0.1.0] - 2024-04-25
 
 ### Added

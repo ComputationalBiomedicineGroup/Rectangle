@@ -13,7 +13,9 @@ Rectangle presents a novel approach to second-generation deconvolution, characte
 
 Rectangle was developed to overcome the current challenges in cell-type deconvolution, providing a robust and accurate methodology while ensuring a low computational profile.
 
-If you use Rectangle in your project, please cite: (TBA).
+> **Citation**
+>
+> If you use Rectangle in your project, please cite: (TBA)
 
 ## Getting started
 
