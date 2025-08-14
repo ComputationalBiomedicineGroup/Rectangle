@@ -13,10 +13,6 @@ Rectangle presents a novel approach to second-generation deconvolution, characte
 
 Rectangle was developed to overcome the current challenges in cell-type deconvolution, providing a robust and accurate methodology while ensuring a low computational profile.
 
-> **Citation**
->
-> If you use Rectangle in your project, please cite: (TBA)
-
 ## Getting started
 
 Please refer to the [documentation][link-docs]. In particular, the
@@ -45,9 +41,9 @@ See the [changelog][changelog].
 
 If you found a bug, please use the [issue tracker][issue-tracker].
 
-## Citation
-
-If you use Rectangle in your research, please cite: [TBA]
+> ## Citation
+>
+> If you use Rectangle in your project, please cite: (TBA)
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/ComputationalBiomedicineGroup/Rectangle/issues
