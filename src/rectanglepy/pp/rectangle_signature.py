@@ -56,6 +56,34 @@ class RectangleSignatureResult:
         self.unkn_gene_corr = unkn_gene_corr
         self.unkn_bulk_err = unkn_bulk_err
 
+    def __repr__(self) -> str:
+        n_signature_genes = len(self.signature_genes) if self.signature_genes is not None else 0
+        n_cell_types = len(self.bias_factors) if self.bias_factors is not None else 0
+
+        lines = [
+            "RectangleSignatureResult",
+            "─" * 50,
+            f"  Total Signature genes: {n_signature_genes:,}",
+            f"  Cell types: {n_cell_types}",
+        ]
+
+        if self.marker_genes_per_cell_type:
+            for cell_type, genes in self.marker_genes_per_cell_type.items():
+                lines.append(f"    {cell_type} marker genes: {genes}")
+
+        if self.assignments is not None:
+            lines.append(f"  Cluster assignments: {self.assignments}")
+
+        if self.unkn_gene_corr is not None:
+            lines.append("  Unknown cell content analysis: Yes")
+
+        if self.optimization_result is not None:
+            best_result = self.optimization_result.loc[self.optimization_result["pearson_r"].idxmax()]
+            lines.append("  DGE Optimization result available:")
+            lines.append(f"    Best cutoffs: p: {best_result['p']}, lfc: {best_result['lfc']}")
+
+        return "\n".join(lines)
+
     def get_signature_matrix(self, include_mrna_bias=True) -> pd.DataFrame:
         """Calculates the signature matrix by multiplying the pseudobulk_sig_cpm DataFrame subset by signature_genes and the bias_factors Series.
 
