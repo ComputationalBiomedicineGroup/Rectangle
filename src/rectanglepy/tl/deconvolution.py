@@ -2,8 +2,9 @@ import math
 import multiprocessing
 
 import numpy as np
+import osqp
 import pandas as pd
-import quadprog
+import scipy.sparse as sp
 import statsmodels.api as sm
 from joblib import Parallel, delayed, parallel_backend
 from loguru import logger
@@ -19,7 +20,7 @@ def _scale_weights(weights: np.ndarray) -> np.ndarray:
 def solve_qp(
     signature: pd.DataFrame,
     bulk: pd.Series,
-    prev_assignments: list[int or str] = None,
+    prev_assignments: list[int | str] = None,
     prev_solution: pd.Series = None,
     gld: np.ndarray = None,
     multiplier: int = None,
@@ -54,42 +55,100 @@ def solve_qp(
     # Minimize     1/2 x^T G x - a^T x
     # Subject to   C.T x >= b
     if multiplier is None:
-        a = np.dot(signature.T, bulk).astype("double")
-        G = np.dot(signature.T, signature).astype("double")
+        a = (signature.T @ bulk).to_numpy(dtype=np.float64)
+        G = (signature.T @ signature).to_numpy(dtype=np.float64)
     else:
         weights = np.square(1 / (signature @ gld))
         weights_dampened = np.clip(_scale_weights(weights), None, multiplier)
-        W = np.diag(weights_dampened)
-        G = np.dot(signature.T, np.dot(W, signature))
-        a = np.dot(signature.T, np.dot(W, bulk))
+        W = np.diag(np.asarray(weights_dampened, dtype=np.float64))
+        G = (signature.T.to_numpy() @ (W @ signature.to_numpy())).astype(np.float64)
+        a = (signature.T.to_numpy() @ (W @ bulk.to_numpy())).astype(np.float64)
 
-    # Compute the constraints matrices
-    n_genes = G.shape[0]
-    # Constraint 1: sum of all fractions is below or equal to 1
-    C1 = -np.ones((n_genes, 1))
-    b1 = -np.ones(1)
-    # Constraint 2: every fraction is greater or equal to 0
-    C2 = np.eye(n_genes)
-    b2 = np.zeros(n_genes)
-    # Constraint 3: if a previous solution is provided, the new solution should be similar to the previous one
-    prev_constraints, prev_b = [], []
+    n_vars = G.shape[0]  # number of cell types / fractions
+
+    # ----- Constraints in your original quadprog form: C.T x >= b
+    # We'll build C (n_vars, n_constraints) then map to OSQP: A = C.T, l=b, u=+inf
+    C_cols = []
+    b_list = []
+
+    # Constraint 1: sum(x) <= 1  ->  -sum(x) >= -1
+    C_cols.append(-np.ones((n_vars, 1), dtype=np.float64))
+    b_list.append(np.array([-1.0], dtype=np.float64))
+
+    # Constraint 2: x >= 0  -> I x >= 0
+    C_cols.append(np.eye(n_vars, dtype=np.float64))
+    b_list.append(np.zeros(n_vars, dtype=np.float64))
+
+    # Constraint 3: keep close to prev_solution (your encoding already turns upper bounds into >= via negation)
     if prev_solution is not None:
+        if prev_assignments is None:
+            raise ValueError("prev_assignments must be provided when prev_solution is provided.")
+
         for cluster in prev_solution.index:
-            C_upper = [-np.ones(1) if str(x) == str(cluster) else np.zeros(1) for x in prev_assignments]
-            C_lower = [np.ones(1) if str(x) == str(cluster) else np.zeros(1) for x in prev_assignments]
-            prev_constraints.extend([C_upper, C_lower])
-            prev_weight = prev_solution.loc[cluster]
-            # allow a 3% variation in the previous weights
-            prev_weight_upper = min(1, prev_weight + 0.03)
-            prev_weight_lower = max(0, prev_weight - 0.03)
-            prev_b.extend([prev_weight_upper * np.ones(1) * -1, prev_weight_lower * np.ones(1)])
+            # x_cluster <= upper  ->  -x_cluster >= -upper
+            C_upper = np.array(
+                [-1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
+                dtype=np.float64,
+            ).reshape(-1, 1)
 
-    C = np.concatenate((C1, C2, *prev_constraints), axis=1)
-    b = np.concatenate((b1, b2, *prev_b), axis=0)
+            # x_cluster >= lower  ->  +x_cluster >= +lower
+            C_lower = np.array(
+                [1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
+                dtype=np.float64,
+            ).reshape(-1, 1)
 
-    scale = np.linalg.norm(G)
-    solution = quadprog.solve_qp(G / scale, a / scale, C, b, factorized=False)
-    return solution[0]
+            prev_weight = float(prev_solution.loc[cluster])
+            upper = min(1.0, prev_weight + 0.03)
+            lower = max(0.0, prev_weight - 0.03)
+
+            C_cols.append(C_upper)
+            b_list.append(np.array([-upper], dtype=np.float64))
+
+            C_cols.append(C_lower)
+            b_list.append(np.array([lower], dtype=np.float64))
+
+    C = np.concatenate(C_cols, axis=1)  # (n_vars, n_constraints)
+    b = np.concatenate(b_list, axis=0).astype(np.float64)  # (n_constraints,)
+
+    # ----- Map to OSQP: minimize 1/2 x^T P x + q^T x
+    # Your objective: 1/2 x^T G x - a^T x  -> q = -a
+    P = G
+    q = -a
+
+    # Optional scaling
+    scale = np.linalg.norm(P)
+    if scale > 0:
+        P = P / scale
+        q = q / scale
+
+    # OSQP uses l <= A x <= u
+    A = C.T  # (n_constraints, n_vars)
+    l = b
+    u = np.full_like(l, np.inf, dtype=np.float64)
+
+    # Sparse matrices (required/expected)
+    P_sp = sp.csc_matrix((P + P.T) / 2.0)  # enforce symmetry
+    A_sp = sp.csc_matrix(A)
+
+    solver = osqp.OSQP()
+    solver.setup(
+        P=P_sp,
+        q=q,
+        A=A_sp,
+        l=l,
+        u=u,
+        verbose=False,
+        eps_abs=1e-5,
+        eps_rel=1e-5,
+        max_iter=10000,
+    )
+
+    res = solver.solve()
+
+    if res.info.status_val not in (1,):  # 1 = solved
+        raise RuntimeError(f"OSQP did not solve the problem: {res.info.status}")
+
+    return res.x
 
 
 def _find_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_gld: np.ndarray) -> int:
