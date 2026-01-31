@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-31
+
+### Changed
+
+-   Switched the quadratic programming solver from quadprog to OSQP.
+
 ## [1.0.0] - 2025-08-14
 
 ### Added
