@@ -19,6 +19,7 @@ urls.Documentation = "https://rectanglepy.readthedocs.io/"
 urls.Source = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 urls.Home-page = "https://github.com/ComputationalBiomedicineGroup/Rectangle"
 dependencies = [
+    "pandas>=2.0.0,<3.0.0",
     "pydeseq2==0.4.11",
     "scipy==1.13.0",
     "osqp>=1.0.5",
