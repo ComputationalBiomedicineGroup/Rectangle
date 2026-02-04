@@ -27,7 +27,7 @@ dependencies = [
     "numpy>=1.0.0,<2.0.0",
     "anndata>=0.8.0,<0.10.9",
     "statsmodels>=0.14.1",
-    "setuptools>=69.0.0,<70.0.0",
+    "setuptools>=80.0.0",
 
 ]
 
