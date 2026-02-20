@@ -1,8 +1,9 @@
+from importlib.resources import files
+
 import pandas as pd
 from anndata import AnnData
 from loguru import logger
 from pandas import DataFrame
-from pkg_resources import resource_stream
 
 from .pp import RectangleSignatureResult, build_rectangle_signatures
 from .tl import deconvolution
@@ -93,13 +94,15 @@ def load_tutorial_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     -------
     The single-cell count data, annotations, and bulk data.
     """
-    with resource_stream(__name__, "data/hao1_annotations_small.zip") as annotations_file:
+    data_dir = files(__package__) / "data"
+
+    with (data_dir / "hao1_annotations_small.zip").open("rb") as annotations_file:
         annotations = pd.read_csv(annotations_file, index_col=0, compression="zip")["0"]
 
-    with resource_stream(__name__, "data/hao1_counts_small.zip") as counts_file:
+    with (data_dir / "hao1_counts_small.zip").open("rb") as counts_file:
         sc_counts = pd.read_csv(counts_file, index_col=0, compression="zip").astype("int")
 
-    with resource_stream(__name__, "data/small_fino_bulks.zip") as bulks_file:
+    with (data_dir / "small_fino_bulks.zip").open("rb") as bulks_file:
         bulks = pd.read_csv(bulks_file, index_col=0, compression="zip")
 
     return sc_counts.T, annotations, bulks.T
