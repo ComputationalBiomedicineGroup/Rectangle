@@ -121,13 +121,18 @@ def solve_qp(
         P = P / scale
         q = q / scale
 
+    # OSQP can return noticeably different solutions from active-set QP when P is singular/ill-conditioned.
+    # Add tiny ridge to make the problem strictly convex and closer to quadprog behavior.
+    ridge = 1e-8
+    P = ((P + P.T) / 2.0) + ridge * np.eye(n_vars, dtype=np.float64)
+
     # OSQP uses l <= A x <= u
     A = C.T  # (n_constraints, n_vars)
     l = b
     u = np.full_like(l, np.inf, dtype=np.float64)
 
     # Sparse matrices (required/expected)
-    P_sp = sp.csc_matrix((P + P.T) / 2.0)  # enforce symmetry
+    P_sp = sp.csc_matrix(P)
     A_sp = sp.csc_matrix(A)
 
     solver = osqp.OSQP()
@@ -138,9 +143,12 @@ def solve_qp(
         l=l,
         u=u,
         verbose=False,
-        eps_abs=1e-5,
-        eps_rel=1e-5,
-        max_iter=10000,
+        eps_abs=1e-8,
+        eps_rel=1e-8,
+        max_iter=50000,
+        polish=True,
+        warm_start=False,
+        scaled_termination=False,
     )
 
     res = solver.solve()
