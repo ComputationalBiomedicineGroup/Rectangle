@@ -33,6 +33,17 @@ Install the latest release of `Rectangle` from `PyPI` <https://pypi.org/project/
 pip install rectanglepy
 ```
 
+## Licence
+
+Rectangle is available under a **dual licence**:
+
+-   **Open-source licence:** [GNU General Public License v3.0 (GPLv3)](LICENSE)
+    → Free to use, modify, and redistribute as long as modifications and redistributions are also under GPLv3.
+
+-   **Commercial licence:** For companies and individuals who wish to use Rectangle in proprietary or closed-source applications, a separate commercial licence is available. See [LICENCE_COM](LICENCE_COM) for details.
+
+For commercial licensing enquiries, please contact: **innovation-psb@uibk.ac.at**
+
 ## Release notes
 
 See the [changelog][changelog].
@@ -40,6 +51,8 @@ See the [changelog][changelog].
 ## Contact
 
 If you found a bug, please use the [issue tracker][issue-tracker].
+
+For commercial licensing: **innovation-psb@uibk.ac.at**
 
 ## Citation
 
