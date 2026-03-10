@@ -1,0 +1,203 @@
+Rectangle - Open Source Version
+
+Copyright (C) 2026 Francesca Finotello, Bernhard Eder
+
+This programme is released under proprietary licence for commercial use
+(for proprietary licences, contact: innovation-psb@uibk.ac.at), but can
+be used for non commercial use under the following conditions:
+
+For non commercial use open source licence GNU General Public Licence v3 (GPLv3)
+
+
+Rectangle
+
+Rectangle is an open-source Python package for single-cell-informed cell-type
+deconvolution of bulk and spatial transcriptomic data.
+
+
+## Licence
+
+Rectangle is available under a **dual licence**:
+
+- **Open source licence:** GNU General Public Licence v3 (GPLv3)
+  → Free to use as long as modifications and redistributions are also under GPLv3.
+
+- **Commercial licence:** For companies that want to use Rectangle in proprietary
+  or closed applications the following applies:
+
+Rectangle - Commercial Licence Terms
+
+Copyright (C) 2026 Francesca Finotello, Bernhard Eder
+
+
+For all users who use Rectangle under GPL v3 the following shall apply:
+
+
+Contributor License Agreement (CLA)
+
+Purpose of this Agreement
+
+The project is distributed under a dual-licensing model, consisting of:
+an open source license (GNU General Public License, GPL), and
+a proprietary license offered by the project owner.
+The purpose of this Agreement is to ensure that contributions initially
+submitted under the GPL can be lawfully reused, integrated, and distributed
+under the proprietary license.
+
+
+Definitions
+
+"Contribution" means any source code, documentation, bug fix, enhancement,
+or other work intentionally submitted by the Contributor for inclusion in
+the project.
+"Contributor" means the individual or legal entity submitting a Contribution.
+"Project Owner" means Francesca Finotello and Bernhard Eder, who maintain
+and license the project.
+
+
+Authorship and Authority
+
+The Contributor represents and warrants that:
+they are the sole author of the Contribution or have all necessary rights
+to submit it;
+the Contribution does not infringe any third-party rights;
+the Contribution is free of patents, licenses, or other restrictions that
+would conflict with the rights granted under this Agreement.
+
+
+Grant of Rights (Dual Licensing Grant)
+
+The Contributor hereby grants the Project Owner a perpetual, worldwide,
+irrevocable, non-exclusive, transferable license to:
+use,
+reproduce,
+modify,
+combine with other works,
+publish,
+sublicense,
+and distribute
+the Contribution, including but not limited to the right to license and
+distribute the Contribution:
+under the GNU General Public License (GPL), and
+under one or more proprietary licenses, as determined at the sole discretion
+of the Project Owner.
+This grant explicitly includes the right to incorporate Contributions
+originally submitted under the GPL version of the project into proprietary
+versions of the project.
+
+
+No Obligation to Disclose Proprietary Versions
+
+The Contributor acknowledges that Contributions submitted under this
+Agreement are not required to be disclosed, published, or distributed
+under an open source license in the proprietary version of the project.
+
+
+Retention of Copyright
+
+The Contributor retains all copyrights in their Contribution. This Agreement
+does not constitute a transfer of ownership, but rather a comprehensive
+grant of rights.
+
+
+Attribution
+
+Unless otherwise agreed, the Project Owner may list the Contributor's name
+in a list of contributors. There is no obligation to provide attribution.
+
+
+No Compensation
+
+Contributions are made voluntarily and without compensation. The Contributor
+is not entitled to fees, royalties, or other remuneration.
+
+
+Disclaimer of Warranty
+
+The Contribution is provided "AS IS", without warranty of any kind, express
+or implied, including but not limited to warranties of merchantability or
+fitness for a particular purpose.
+
+
+Governing Law
+
+This Agreement shall be governed by the laws of Austria, excluding its
+conflict of law provisions.
+
+
+Entire Agreement
+
+This Agreement constitutes the entire agreement between the Contributor
+and the Project Owner regarding Contributions and supersedes all prior
+agreements or understandings.
+
+
+Acceptance
+
+By submitting a Contribution, the Contributor confirms that they have read,
+understood, and agreed to the terms of this Agreement.
+
+
+
+This licence permits the use of Rectangle in proprietary or non-open projects
+under the following conditions:
+
+1. The licensee may use and distribute Rectangle in closed applications
+   without publishing the source code.
+2. The licence is non-transferable and applies only to the licensed company.
+3. Use is unlimited in time, provided that the licence fee has been paid in full.
+4. Support and updates are optional and must be agreed separately.
+5. Any use without a valid commercial licence is automatically subject to GPLv3.
+
+For offers and pricing models: innovation-psb@uibk.ac.at
+→ Please contact us at innovation-psb@uibk.ac.at to obtain a commercial licence.
+
+
+For all users of rectangle the following applies:
+
+
+Updates & Support
+
+1. The copyright holder offers optional paid updates, maintenance and
+   technical support.
+2. Without a support contract, there is no entitlement to future versions
+   or bug fixes.
+
+
+Liability & Warranty
+
+1. Rectangle is provided 'as is' without any express or implied warranty.
+2. The rights holder is not liable for any damage, loss of data or
+   consequential damage resulting from use.
+3. Liability is limited to a maximum of the licence fee paid.
+
+
+Copyright & Ownership
+
+1. Rectangle remains the intellectual property of the rights holder at
+   all times.
+2. This licence does not transfer ownership, only rights of use.
+3. Modifications or derivative works by the licensee remain the property
+   of the licensee, unless they are derived directly from Rectangle code.
+
+
+Termination
+
+1. This licence shall automatically expire if the licensee violates any
+   material terms of the agreement.
+2. Upon termination, the licensee must delete all copies of the Rectangle
+   software and may no longer use it.
+
+
+Miscellaneous
+
+1. This licence is subject to the laws of Austria.
+2. The place of jurisdiction is the registered office of the rights holder.
+3. Amendments or additions must be made in writing.
+4. Should any provision be invalid, the remaining provisions shall remain valid.
+
+
+## Contact
+
+**Authors:** Francesca Finotello, Bernhard Eder
+**Email:** innovation-psb@uibk.ac.at

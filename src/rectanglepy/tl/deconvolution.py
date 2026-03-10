@@ -159,7 +159,7 @@ def solve_qp(
     return res.x
 
 
-def _find_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_gld: np.ndarray) -> int:
+def _calculate_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_gld: np.ndarray) -> int:
     solutions_std = []
     np.random.seed(1)
     weights = np.square(1 / (np.dot(signature, qp_gld)))
@@ -190,7 +190,7 @@ def _find_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_gld: n
     return best_dampening_constant
 
 
-def _calculate_dwls(
+def _calculate_ls(
     signature: pd.DataFrame,
     bulk: pd.Series,
     prev_assignments: list[int or str] = None,
@@ -201,7 +201,7 @@ def _calculate_dwls(
     bulk = bulk.loc[genes].sort_index().astype("double")
 
     approximate_solution = solve_qp(signature, bulk, prev_assignments, prev_weights)
-    dampening_constant = _find_dampening_constant(signature, bulk, approximate_solution)
+    dampening_constant = _calculate_dampening_constant(signature, bulk, approximate_solution)
     multiplier = 2**dampening_constant
 
     max_iterations = 1000
@@ -304,7 +304,7 @@ def _deconvolute(
         bias_factors = bias_factors * 0 + 1  # set all bias factors to 1
 
     signature = pseudobulk_sig_cpm.loc[signature_genes_direct_reduced] * bias_factors
-    start_fractions = _calculate_dwls(signature, bulk)
+    start_fractions = _calculate_ls(signature, bulk)
 
     if clustered_pseudobulk_sig_cpm is None:
         start_fractions, bulk_err = correct_for_unknown_cell_content(
@@ -323,8 +323,8 @@ def _deconvolute(
     clustered_signature = clustered_pseudobulk_sig_cpm.loc[clustered_signature_genes] * cluster_bias_factors
 
     try:
-        clustered_fractions = _calculate_dwls(clustered_signature, bulk)
-        recursive_fractions = _calculate_dwls(signature, bulk, signatures.assignments, clustered_fractions)
+        clustered_fractions = _calculate_ls(clustered_signature, bulk)
+        recursive_fractions = _calculate_ls(signature, bulk, signatures.assignments, clustered_fractions)
     except Exception as e:
         logger.warning(f"Recursive deconvolution failed with error: {e}")
         start_fractions, bulk_err = correct_for_unknown_cell_content(
