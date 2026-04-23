@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-04-23
+
+### Changed
+
+-   Wider QP tolerances
+
 ## [1.4.0] - 2026-03-10
 
 ### Changed
