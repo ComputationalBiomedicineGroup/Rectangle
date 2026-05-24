@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-05-24
+
+### Changed
+
+-   Changed the open-source license from GPLv3 to BSD-3-Clause while retaining the commercial licensing option.
+
 ## [1.4.1] - 2026-04-23
 
 ### Changed
@@ -20,10 +26,10 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
--   **Licensing: Rectangle is now available under a dual licence.**
-    -   Non-commercial use: GNU General Public Licence v3 (GPLv3).
-    -   Commercial use: A proprietary licence is available for companies wishing to use Rectangle in closed-source or proprietary applications. For enquiries, contact innovation-psb@uibk.ac.at.
-    -   See [LICENCE_COM](LICENCE_COM) for full commercial licence terms.
+-   **Licensing: Rectangle is available under a dual license.**
+    -   Non-commercial use: GNU General Public License v3 (GPLv3).
+    -   Commercial use: A proprietary license is available for companies wishing to use Rectangle in closed-source or proprietary applications. For enquiries, contact innovation-psb@uibk.ac.at.
+    -   See the commercial license terms for details.
 -   Added Contributor License Agreement (CLA) for external contributions.
 
 ## [1.2.0] - 2026-01-31

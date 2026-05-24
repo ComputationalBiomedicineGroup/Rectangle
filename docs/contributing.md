@@ -4,7 +4,7 @@ We welcome contributions! The best way to contribute is by opening a pull reques
 
 ## Contributor License Agreement (CLA)
 
-Rectangle uses a dual-licensing model (GPLv3 + commercial). By submitting a contribution (e.g., via pull request), you agree to the terms of our [Contributor License Agreement (CLA)](https://github.com/ComputationalBiomedicineGroup/Rectangle/blob/main/CLA.md). This ensures that contributions can be included in both the open-source and commercial versions of Rectangle.
+Rectangle uses a dual-licensing model (BSD-3-Clause OR Commercial). By submitting a contribution (e.g., via pull request), you agree to the terms of our [Contributor License Agreement (CLA)](https://github.com/ComputationalBiomedicineGroup/Rectangle/blob/main/CLA.md). This ensures that contributions can be included in both the open-source and commercial versions of Rectangle.
 
 ## How to Contribute
 

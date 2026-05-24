@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause OR LicenseRef-Rectangle-Commercial
+
 import numpy as np
 import pandas as pd
 import scipy.sparse

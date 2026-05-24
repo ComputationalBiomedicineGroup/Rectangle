@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause OR LicenseRef-Rectangle-Commercial
+
 from importlib.resources import files
 
 import pandas as pd
