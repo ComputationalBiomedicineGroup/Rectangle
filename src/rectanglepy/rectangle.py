@@ -40,7 +40,7 @@ def rectangle(
     raw
         A flag indicating whether to use the raw Anndata data.
     optimize_cutoffs
-        Indicates whether to optimize the p-value and log fold change cutoffs using gridsearch.
+        Indicates whether to optimize the log fold change cutoffs using gridsearch.
     p
         The p-value threshold for the DE analysis (only used if optimize_cutoffs is False).
     lfc

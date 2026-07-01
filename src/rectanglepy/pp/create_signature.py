@@ -303,7 +303,7 @@ def build_rectangle_signatures(
     raw
         A flag indicating whether to use the raw Anndata data. Defaults to False.
     optimize_cutoffs
-        Indicates whether to optimize the p-value and log fold change cutoffs using gridsearch. Defaults to True.
+        Indicates whether to optimize the log fold change cutoffs using gridsearch. Defaults to True.
     p
         The p-value threshold for the DE analysis (only used if optimize_cutoffs is False).
     lfc
