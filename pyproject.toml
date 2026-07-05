@@ -4,7 +4,7 @@ requires = ["hatchling"]
 
 [project]
 name = "rectanglepy"
-version = "version = "1.5.0""
+version = "1.5.0"
 description = "Hierarchical deconvolution of bulk  transcriptomics"
 readme = "README.md"
 requires-python = ">=3.10"
