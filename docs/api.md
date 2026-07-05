@@ -12,4 +12,5 @@
     pp.build_rectangle_signatures
     tl.deconvolution
     pp.RectangleSignatureResult
+    RectangleAdvancedParameters
 ```
