@@ -7,6 +7,7 @@ from anndata import AnnData
 from loguru import logger
 from pandas import DataFrame
 
+from .parameters import RectangleAdvancedParameters
 from .pp import RectangleSignatureResult, build_rectangle_signatures
 from .tl import deconvolution
 
@@ -24,6 +25,7 @@ def rectangle(
     lfc=1.5,
     n_cpus: int = None,
     gene_expression_threshold=0.5,
+    advanced_parameters: RectangleAdvancedParameters = None,
 ) -> tuple[DataFrame, RectangleSignatureResult]:
     r"""All in one deconvolution method. Creates signatures and deconvolutes the bulk data. Has options for subsampling and consensus runs.
 
@@ -51,6 +53,8 @@ def rectangle(
         A flag indicating whether to correct for mRNA bias. Defaults to True.
     gene_expression_threshold : float
         The threshold for gene expression. Genes with expression below this threshold are removed from the analysis.
+    advanced_parameters
+        Optional advanced Rectangle parameters. Defaults are used when not provided.
 
     Returns
     -------
@@ -71,6 +75,7 @@ def rectangle(
         lfc=lfc,
         n_cpus=n_cpus,
         gene_expression_threshold=gene_expression_threshold,
+        advanced_parameters=advanced_parameters,
     )
 
     estimations, bulk_err = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)

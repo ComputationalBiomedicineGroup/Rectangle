@@ -13,6 +13,7 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from scipy.stats import pearsonr
 from sklearn.metrics import silhouette_score
 
+from rectanglepy.parameters import RectangleAdvancedParameters
 from rectanglepy.tl.deconvolution import solve_qp
 
 from .rectangle_signature import RectangleSignatureResult
@@ -129,11 +130,16 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
 
 
 def _run_deseq2(
-    countsig: pd.DataFrame, sc_data, annotations: pd.Series, n_cpus: int = None, gene_expression_threshold=0.5
+    countsig: pd.DataFrame,
+    sc_data,
+    annotations: pd.Series,
+    n_cpus: int = None,
+    gene_expression_threshold=0.5,
+    number_of_bootstraps: int = 7,
 ) -> dict[str | int, pd.DataFrame]:
     results = {}
     inference = DefaultInference(n_cpus=n_cpus)
-    bootstrapped_signature = _create_bootstrap_signature(countsig, sc_data, annotations)
+    bootstrapped_signature = _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps)
     np.random.seed(42)
     for _i, cell_type in enumerate(countsig.columns):
         bootstrapped_signature_copy = bootstrapped_signature.copy()
@@ -167,12 +173,11 @@ def _run_deseq2(
     return results
 
 
-def _create_bootstrap_signature(countsig, sc_data, annotations) -> pd.DataFrame:
+def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps: int = 7) -> pd.DataFrame:
     if scipy.sparse.issparse(sc_data):
         sc_data = sc_data.toarray()
     celltypes = countsig.columns
     bootstrapped_signature = pd.DataFrame()
-    number_of_bootstraps = 7
     samples_per_bootstrap = 500
     np.random.seed(42)
     for celltype in celltypes:
@@ -198,14 +203,30 @@ def _de_analysis(
     n_cpus: int = None,
     genes=None,
     gene_expression_threshold=0.5,
+    advanced_parameters: RectangleAdvancedParameters = None,
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
-    deseq_results = _run_deseq2(pseudo_count_sig, sc_data, annotations, n_cpus, gene_expression_threshold)
+    advanced_parameters = advanced_parameters or RectangleAdvancedParameters()
+    deseq_results = _run_deseq2(
+        pseudo_count_sig,
+        sc_data,
+        annotations,
+        n_cpus,
+        gene_expression_threshold,
+        advanced_parameters.number_of_bootstraps,
+    )
     optimization_results = None
 
     if optimize_cutoffs:
         logger.info("Optimizing cutoff parameters p and lfc")
-        optimization_results = _optimize_parameters(sc_data, annotations, pseudo_count_sig, deseq_results, genes)
+        optimization_results = _optimize_parameters(
+            sc_data,
+            annotations,
+            pseudo_count_sig,
+            deseq_results,
+            genes,
+            advanced_parameters.grid_search_split_size,
+        )
         p, lfc = optimization_results.iloc[0, 0:2]
         logger.info(f"Optimization done\n Best cutoffs  p: {p} and lfc: {lfc}")
 
@@ -287,6 +308,7 @@ def build_rectangle_signatures(
     lfc=1.5,
     n_cpus: int = None,
     gene_expression_threshold=0.5,
+    advanced_parameters: RectangleAdvancedParameters = None,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
 
@@ -312,11 +334,14 @@ def build_rectangle_signatures(
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
     gene_expression_threshold
         The gene expression threshold for the DE analysis. How many cells need to express a gene to be considered in DGE
+    advanced_parameters
+        Optional advanced Rectangle parameters. Defaults are used when not provided.
 
     Returns
     -------
     The result of the rectangle signature analysis which is of type RectangleSignatureResult.
     """
+    advanced_parameters = advanced_parameters or RectangleAdvancedParameters()
     annotations = adata.obs[cell_type_col]
     adata = adata[:, adata.X.sum(axis=0) > len(annotations.value_counts())]
     assert adata.var_names.is_unique, "Duplicate gene found in adata"
@@ -344,7 +369,16 @@ def build_rectangle_signatures(
     m_rna_biasfactors = _create_bias_factors(pseudo_sig_counts, sc_counts, annotations)
 
     marker_genes, marker_genes_per_cell_type, optimization_result = _de_analysis(
-        pseudo_sig_counts, sc_counts, annotations, p, lfc, optimize_cutoffs, n_cpus, genes, gene_expression_threshold
+        pseudo_sig_counts,
+        sc_counts,
+        annotations,
+        p,
+        lfc,
+        optimize_cutoffs,
+        n_cpus,
+        genes,
+        gene_expression_threshold,
+        advanced_parameters,
     )
     pseudo_sig_cpm = _convert_to_cpm(pseudo_sig_counts)
     logger.info("Starting rectangle cluster analysis")
@@ -371,6 +405,7 @@ def build_rectangle_signatures(
         lfc,
         False,
         gene_expression_threshold=gene_expression_threshold,
+        advanced_parameters=advanced_parameters,
     )
     clustered_signature = _convert_to_cpm(clustered_signature)
     return RectangleSignatureResult(
@@ -400,7 +435,12 @@ def _create_pseudo_count_sig(sc_counts: np.ndarray, annotations: pd.Series, var_
 
 
 def _optimize_parameters(
-    sc_data: pd.DataFrame, annotations: pd.Series, pseudo_signature_counts: pd.DataFrame, de_results, genes=None
+    sc_data: pd.DataFrame,
+    annotations: pd.Series,
+    pseudo_signature_counts: pd.DataFrame,
+    de_results,
+    genes=None,
+    grid_search_split_size: int = 50,
 ) -> pd.DataFrame:
     # search space for p and lfc
     lfcs = [x / 100 for x in range(160, 230, 10)]
@@ -408,7 +448,7 @@ def _optimize_parameters(
 
     results = []
     logger.info("generating pseudo bulks")
-    bulks, real_fractions = _generate_pseudo_bulks(sc_data, annotations, genes)
+    bulks, real_fractions = _generate_pseudo_bulks(sc_data, annotations, genes, grid_search_split_size)
     for p in ps:
         for lfc in lfcs:
             try:
@@ -441,9 +481,8 @@ def _assess_parameter_fit(
     return rsme, pearson_r
 
 
-def _generate_pseudo_bulks(sc_data, annotations, genes=None):
+def _generate_pseudo_bulks(sc_data, annotations, genes=None, split_size: int = 50):
     number_of_bulks = 50
-    split_size = 50
     bulks = []
     real_fractions = []
     np.random.seed(42)

@@ -6,6 +6,7 @@ import pytest
 from anndata import AnnData
 
 import rectanglepy as rectangle
+from rectanglepy import RectangleAdvancedParameters
 from rectanglepy.pp.create_signature import (
     _assess_parameter_fit,
     _calculate_cluster_range,
@@ -18,6 +19,7 @@ from rectanglepy.pp.create_signature import (
     _de_analysis,
     _generate_pseudo_bulks,
     _get_fcluster_assignments,
+    _optimize_parameters,
     _run_deseq2,
     build_rectangle_signatures,
 )
@@ -154,6 +156,7 @@ def test_generate_pseudo_bulks(small_data):
     sc_counts = sc_counts.astype("int")
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     result, _ = _generate_pseudo_bulks(adata.X.T, annotations, adata.var_names)
+    custom_result, _ = _generate_pseudo_bulks(adata.X.T, annotations, adata.var_names, split_size=10)
 
     sc_data = sc_counts.astype(pd.SparseDtype("int"))
     csr_sparse_matrix = sc_data.sparse.to_coo().tocsr()
@@ -162,9 +165,38 @@ def test_generate_pseudo_bulks(small_data):
     result_sparse, _ = _generate_pseudo_bulks(adata_sparse.X.T, annotations, adata_sparse.var_names)
 
     assert len(result) == 1000 and len(result.columns) == 50
+    assert custom_result.shape == result.shape
+    assert not np.allclose(result, custom_result)
     # first gene should have all 0s
     assert result.iloc[0, :].sum() == 0
     assert np.allclose(result, result_sparse)
+
+
+def test_optimize_parameters_uses_grid_search_split_size(monkeypatch):
+    seen = {}
+
+    def fake_generate_pseudo_bulks(sc_data, annotations, genes=None, split_size=50):
+        seen["split_size"] = split_size
+        bulks = pd.DataFrame([[1.0]], index=["gene"], columns=["bulk"])
+        real_fractions = pd.DataFrame([[1.0]], index=["cell_type"], columns=["bulk"])
+        return bulks, real_fractions
+
+    def fake_assess_parameter_fit(lfc, p, bulks, real_fractions, pseudo_signature_counts, de_results):
+        return 0.0, 1.0
+
+    monkeypatch.setattr(rectangle.pp.create_signature, "_generate_pseudo_bulks", fake_generate_pseudo_bulks)
+    monkeypatch.setattr(rectangle.pp.create_signature, "_assess_parameter_fit", fake_assess_parameter_fit)
+
+    results = _optimize_parameters(
+        pd.DataFrame(),
+        pd.Series(dtype=str),
+        pd.DataFrame(),
+        {},
+        grid_search_split_size=13,
+    )
+
+    assert seen["split_size"] == 13
+    assert results.iloc[0]["pearson_r"] == 1.0
 
 
 def test_asses_fit(small_data):
@@ -215,5 +247,22 @@ def test_create_bootstrap_signature(small_data):
     sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     bootstrap = _create_bootstrap_signature(sc_pseudo, adata.X.T, annotations)
+
+    assert len(bootstrap.columns) == len(sc_pseudo.columns) * bootstraps_per_cell
+
+
+def test_create_bootstrap_signature_with_advanced_parameter(small_data):
+    bootstraps_per_cell = 3
+    advanced_parameters = RectangleAdvancedParameters(number_of_bootstraps=bootstraps_per_cell)
+    sc_counts, annotations, bulk = small_data
+    sc_counts = sc_counts.astype("int")
+    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
+    bootstrap = _create_bootstrap_signature(
+        sc_pseudo,
+        adata.X.T,
+        annotations,
+        advanced_parameters.number_of_bootstraps,
+    )
 
     assert len(bootstrap.columns) == len(sc_pseudo.columns) * bootstraps_per_cell
