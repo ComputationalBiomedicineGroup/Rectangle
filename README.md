@@ -61,7 +61,9 @@ For commercial licensing: **innovation-psb@uibk.ac.at**
 
 ## Citation
 
-> If you use Rectangle in your project, please cite: (TBA)
+If you use Rectangle in your project, please cite:
+
+> Eder B, Rigato I, Dietrich A, Merotto L, Sturm G, Treis T, List M, Theis FJ, Finotello F. Rectangle: robust and scalable multiscale deconvolution informed by single-cell RNA sequencing data. bioRxiv. 2026. doi:[10.64898/2026.07.07.736950](https://doi.org/10.64898/2026.07.07.736950)
 
 [scverse-discourse]: https://discourse.scverse.org/
 [issue-tracker]: https://github.com/ComputationalBiomedicineGroup/Rectangle/issues
