@@ -33,6 +33,12 @@ Install the latest release of `Rectangle` from `PyPI` <https://pypi.org/project/
 pip install rectanglepy
 ```
 
+## How Rectangle works
+
+![Overview of the Rectangle signature-building and multiscale deconvolution workflow](docs/_static/rectangle_workflow.png)
+
+Rectangle performs robust multiscale deconvolution informed by single-cell transcriptomics. Rectangle takes annotated scRNA-seq data and a bulk RNA-seq mixture as input. In the signature-building phase, it performs bootstrapped pseudobulking of the scRNA-seq data, followed by signature-gene selection based on log-fold-change (logFC) and p-value, and signature-matrix optimization (minimizing the condition number and correcting for cell-type-specific mRNA content bias). Based on this, it constructs two signature matrices: a “direct signature”, resolving individual cell types, and a “clustered signature” grouping transcriptionally similar cell types. In the deconvolution phase, Rectangle first uses the clustered signature to deconvolve the bulk data into coarse cell-type estimates. These are then used to constrain a second deconvolution step that leverages the direct signature to resolve individual cell-type fractions. Finally, the resulting estimates are scaled to account for unknown cellular content not represented in the reference.
+
 ## License
 
 Rectangle is dual-licensed: BSD-3-Clause OR Commercial.
