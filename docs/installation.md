@@ -1,6 +1,7 @@
 # Installation
 
-You need to have Python 3.10 or higher installed on your system.
+You need to have Python 3.11 or higher installed on your system. Rectangle is tested on
+Python 3.11, 3.12, 3.13 and 3.14.
 
 To install the latest release of `Rectangle` from PyPI:
 

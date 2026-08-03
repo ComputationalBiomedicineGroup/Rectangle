@@ -23,7 +23,7 @@ Please refer to the [documentation][link-docs]. In particular, the
 
 ## Installation
 
-You need Python 3.10–3.12 installed on your system.
+You need Python 3.11–3.14 installed on your system.
 
 How to install Rectangle:
 

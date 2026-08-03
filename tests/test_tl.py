@@ -49,7 +49,7 @@ def finotello_bulk(data_dir):
 def test_scale_weigths():
     weights = [1, 0]
     result = _scale_weights(weights)
-    assert (result == [np.Inf, 0]).all()
+    assert (result == [np.inf, 0]).all()
 
 
 def test_simple_weighted_dampened_deconvolution(quantiseq_data):

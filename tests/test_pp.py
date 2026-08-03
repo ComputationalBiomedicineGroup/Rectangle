@@ -109,7 +109,7 @@ def test_create_annotations_from_cluster_labels(hao_signature):
 def test_create_pseudo_count_signature(small_data):
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
-    expected = sc_counts.groupby(annotations.values, axis=1).sum()
+    expected = sc_counts.T.groupby(annotations.values).sum().T
 
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     pseudo_sig_count = _create_pseudo_count_sig(adata.X.T, adata.obs.cell_type, adata.var_names)
@@ -164,7 +164,7 @@ def test_generate_pseudo_bulks(small_data):
 
     result_sparse, _ = _generate_pseudo_bulks(adata_sparse.X.T, annotations, adata_sparse.var_names)
 
-    assert len(result) == 1000 and len(result.columns) == 50
+    assert len(result) == 1000 and len(result.columns) == 100
     assert custom_result.shape == result.shape
     assert not np.allclose(result, custom_result)
     # first gene should have all 0s
@@ -175,8 +175,9 @@ def test_generate_pseudo_bulks(small_data):
 def test_optimize_parameters_uses_grid_search_split_size(monkeypatch):
     seen = {}
 
-    def fake_generate_pseudo_bulks(sc_data, annotations, genes=None, split_size=50):
+    def fake_generate_pseudo_bulks(sc_data, annotations, genes=None, split_size=50, number_of_bulks=100):
         seen["split_size"] = split_size
+        seen["number_of_bulks"] = number_of_bulks
         bulks = pd.DataFrame([[1.0]], index=["gene"], columns=["bulk"])
         real_fractions = pd.DataFrame([[1.0]], index=["cell_type"], columns=["bulk"])
         return bulks, real_fractions
@@ -193,16 +194,18 @@ def test_optimize_parameters_uses_grid_search_split_size(monkeypatch):
         pd.DataFrame(),
         {},
         grid_search_split_size=13,
+        grid_search_bulks=17,
     )
 
     assert seen["split_size"] == 13
+    assert seen["number_of_bulks"] == 17
     assert results.iloc[0]["pearson_r"] == 1.0
 
 
 def test_asses_fit(small_data):
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
-    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    sc_pseudo = sc_counts.T.groupby(annotations.values).sum().T
     de_result = _run_deseq2(sc_pseudo, sc_counts.values, annotations)
 
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
@@ -225,7 +228,7 @@ def test_asses_fit(small_data):
 def test_de_analysis(small_data):
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
-    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    sc_pseudo = sc_counts.T.groupby(annotations.values).sum().T
 
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     r1, r2, r3 = _de_analysis(sc_pseudo, adata.X.T, annotations, 0.4, 0.1, False, None, adata.var_names)
@@ -244,7 +247,7 @@ def test_create_bootstrap_signature(small_data):
     bootstraps_per_cell = 7
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
-    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    sc_pseudo = sc_counts.T.groupby(annotations.values).sum().T
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     bootstrap = _create_bootstrap_signature(sc_pseudo, adata.X.T, annotations)
 
@@ -256,7 +259,7 @@ def test_create_bootstrap_signature_with_advanced_parameter(small_data):
     advanced_parameters = RectangleAdvancedParameters(number_of_bootstraps=bootstraps_per_cell)
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
-    sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
+    sc_pseudo = sc_counts.T.groupby(annotations.values).sum().T
     adata = AnnData(sc_counts.T, obs=annotations.to_frame(name="cell_type"))
     bootstrap = _create_bootstrap_signature(
         sc_pseudo,

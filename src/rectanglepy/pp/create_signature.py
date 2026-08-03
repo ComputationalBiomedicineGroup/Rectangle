@@ -18,9 +18,13 @@ from rectanglepy.tl.deconvolution import solve_qp
 
 from .rectangle_signature import RectangleSignatureResult
 
+#: Grid-search scores closer than this are treated as indistinguishable noise.
+CUTOFF_SELECTION_TOLERANCE = 0.01
+
 
 def _convert_to_cpm(count_sc_data):
-    return count_sc_data * 1e6 / np.sum(count_sc_data)
+    # axis=0 is explicit because np.sum on a DataFrame reduces over both axes from pandas 3 on
+    return count_sc_data * 1e6 / count_sc_data.sum(axis=0)
 
 
 def _create_condition_number_matrix(de_adjusted, pseudo_signature: pd.DataFrame, max_gene_number: int) -> pd.DataFrame:
@@ -129,6 +133,19 @@ def _filter_de_analysis_results(de_analysis_result, p, logfc):
     return adjusted_result
 
 
+def _lfc_coefficient(stat_res: DeseqStats, factor: str, level: str) -> str:
+    """Find the LFC column of ``stat_res`` that holds the ``level`` effect of ``factor``.
+
+    pydeseq2 names this column after the design matrix, which has changed between releases
+    (``condition_B_vs_A`` with the old ``design_factors`` API, ``condition[T.B]`` with the
+    formulaic designs), so it is resolved from the fitted object rather than hard-coded.
+    """
+    candidates = [column for column in stat_res.LFC.columns if factor in column and level in column]
+    if not candidates:
+        raise KeyError(f"No LFC coefficient for {factor}={level} in {list(stat_res.LFC.columns)}")
+    return candidates[0]
+
+
 def _run_deseq2(
     countsig: pd.DataFrame,
     sc_data,
@@ -144,7 +161,7 @@ def _run_deseq2(
     for _i, cell_type in enumerate(countsig.columns):
         bootstrapped_signature_copy = bootstrapped_signature.copy()
         countsig_copy = countsig.copy()
-        sc_data_filtered = sc_data.T[annotations == cell_type]
+        sc_data_filtered = sc_data.T[(annotations == cell_type).to_numpy()]
         expressed_cells = (sc_data_filtered > 0).sum(axis=0)
         if expressed_cells.ndim > 1:  # needed for sparse matrices
             expressed_cells = np.squeeze(np.asarray(expressed_cells))
@@ -159,15 +176,17 @@ def _run_deseq2(
         dds = DeseqDataSet(
             counts=bootstrapped_signature_copy,
             metadata=clinical_df,
-            design_factors="condition",
+            design="~condition",
             quiet=True,
             inference=inference,
             refit_cooks=False,
         )
         dds.deseq2()
-        stat_res = DeseqStats(dds, inference=inference, quiet=True, cooks_filter=False)
+        stat_res = DeseqStats(
+            dds, contrast=["condition", "B", "A"], inference=inference, quiet=True, cooks_filter=False
+        )
         stat_res.summary(quiet=True)
-        stat_res.lfc_shrink("condition_B_vs_A")
+        stat_res.lfc_shrink(_lfc_coefficient(stat_res, "condition", "B"))
         results[cell_type] = stat_res.results_df
 
     return results
@@ -181,7 +200,7 @@ def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootst
     samples_per_bootstrap = 500
     np.random.seed(42)
     for celltype in celltypes:
-        sc_data_filtered = sc_data.T[annotations == celltype]
+        sc_data_filtered = sc_data.T[(annotations == celltype).to_numpy()]
         for i in range(number_of_bootstraps):
             selected_rows = np.random.choice(len(sc_data_filtered), samples_per_bootstrap, replace=True)
             summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
@@ -226,6 +245,7 @@ def _de_analysis(
             deseq_results,
             genes,
             advanced_parameters.grid_search_split_size,
+            advanced_parameters.grid_search_bulks,
         )
         p, lfc = optimization_results.iloc[0, 0:2]
         logger.info(f"Optimization done\n Best cutoffs  p: {p} and lfc: {lfc}")
@@ -441,6 +461,7 @@ def _optimize_parameters(
     de_results,
     genes=None,
     grid_search_split_size: int = 50,
+    grid_search_bulks: int = 100,
 ) -> pd.DataFrame:
     # search space for p and lfc
     lfcs = [x / 100 for x in range(160, 230, 10)]
@@ -448,7 +469,9 @@ def _optimize_parameters(
 
     results = []
     logger.info("generating pseudo bulks")
-    bulks, real_fractions = _generate_pseudo_bulks(sc_data, annotations, genes, grid_search_split_size)
+    bulks, real_fractions = _generate_pseudo_bulks(
+        sc_data, annotations, genes, grid_search_split_size, grid_search_bulks
+    )
     for p in ps:
         for lfc in lfcs:
             try:
@@ -461,8 +484,35 @@ def _optimize_parameters(
                 logger.error(f"Error in assessing parameter fit for p={p}, lfc={lfc}: {e}")
 
     results_df = pd.DataFrame(results)
+
+    # Each grid point is scored on `grid_search_bulks` random pseudo-bulks, so
+    # differences below CUTOFF_SELECTION_TOLERANCE are sampling noise. Taking a strict
+    # argmax over them makes the chosen cutoff flip on float-level differences (numpy
+    # version, BLAS build), which changes the marker set wholesale. Among all
+    # near-optimal candidates take the strictest (highest) lfc, the most parsimonious
+    # signature the data cannot distinguish from the best one.
     # best results first
-    results_df = results_df.sort_values(by=["pearson_r", "rmse"], ascending=[False, True])
+    by_score = {"by": ["pearson_r", "rmse"], "ascending": [False, True], "kind": "stable"}
+    near_optimal = results_df["pearson_r"] >= results_df["pearson_r"].max() - CUTOFF_SELECTION_TOLERANCE
+
+    if results_df.loc[near_optimal, "lfc"].max() >= max(lfcs):
+        # The near-optimal band runs into the edge of the search space, so the strictest
+        # indistinguishable cutoff is set by where the grid happens to stop rather than by
+        # the data — an even stricter one might score just as well. Rather than trust a
+        # truncated parsimony choice, fall back to the plain best-scoring cutoff.
+        logger.warning(
+            f"Cutoff scores within {CUTOFF_SELECTION_TOLERANCE} of the best reach the top of the "
+            f"logFC search space ({max(lfcs)}); falling back to the best-scoring cutoff. "
+            f"Consider widening the search space or raising grid_search_bulks."
+        )
+        results_df = results_df.sort_values(**by_score)
+    else:
+        results_df = pd.concat(
+            [
+                results_df[near_optimal].sort_values(by=["lfc", "p"], ascending=False, kind="stable"),
+                results_df[~near_optimal].sort_values(**by_score),
+            ]
+        )
 
     return results_df
 
@@ -476,13 +526,12 @@ def _assess_parameter_fit(
 
     estimated_fractions = estimated_fractions.sort_index()
 
-    rsme = np.sqrt(np.mean((real_fractions - estimated_fractions) ** 2))
+    rsme = np.sqrt(np.mean(((real_fractions - estimated_fractions) ** 2).to_numpy()))
     pearson_r = pearsonr(real_fractions.values.flatten(), estimated_fractions.values.flatten())[0]
     return rsme, pearson_r
 
 
-def _generate_pseudo_bulks(sc_data, annotations, genes=None, split_size: int = 50):
-    number_of_bulks = 50
+def _generate_pseudo_bulks(sc_data, annotations, genes=None, split_size: int = 50, number_of_bulks: int = 100):
     bulks = []
     real_fractions = []
     np.random.seed(42)
@@ -516,7 +565,7 @@ def _generate_pseudo_bulks(sc_data, annotations, genes=None, split_size: int = 5
 
 def _generate_estimated_fractions(pseudo_bulk_sig, bulks, p, logfc, de_results):
     marker_genes = pd.Series(_get_marker_genes(de_results, logfc, p, pseudo_bulk_sig)[0])
-    signature = (pseudo_bulk_sig * 1e6 / np.sum(pseudo_bulk_sig)).loc[marker_genes]
+    signature = _convert_to_cpm(pseudo_bulk_sig).loc[marker_genes]
 
     estimated_fractions = bulks.apply(lambda x: _solve_quadratic_programming(signature, x), axis=0)
     estimated_fractions.index = signature.columns
