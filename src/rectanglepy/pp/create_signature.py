@@ -142,17 +142,13 @@ def _run_deseq2(
     bootstrapped_signature = _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps)
     np.random.seed(42)
     for _i, cell_type in enumerate(countsig.columns):
-        bootstrapped_signature_copy = bootstrapped_signature.copy()
-        countsig_copy = countsig.copy()
         sc_data_filtered = sc_data.T[annotations == cell_type]
         expressed_cells = (sc_data_filtered > 0).sum(axis=0)
         if expressed_cells.ndim > 1:  # needed for sparse matrices
             expressed_cells = np.squeeze(np.asarray(expressed_cells))
-            # make dense out of sparse
-            sc_data_filtered = sc_data_filtered.toarray()
         threshold = gene_expression_threshold * sc_data_filtered.shape[0]
-        genes = countsig_copy.index[expressed_cells > threshold].tolist()
-        bootstrapped_signature_copy = bootstrapped_signature_copy.loc[genes].T
+        genes = countsig.index[expressed_cells > threshold].tolist()
+        bootstrapped_signature_copy = bootstrapped_signature.loc[genes].T
         logger.info(f"Running DE analysis for {cell_type}")
         condition = ["B" if (cell_type + "_") in x else "A" for x in bootstrapped_signature_copy.index]
         clinical_df = pd.DataFrame({"condition": condition}, index=bootstrapped_signature_copy.index)
@@ -174,23 +170,28 @@ def _run_deseq2(
 
 
 def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps: int = 7) -> pd.DataFrame:
-    if scipy.sparse.issparse(sc_data):
-        sc_data = sc_data.toarray()
+    # Cells are only ever summed here, never read one by one, so sparse input is kept sparse:
+    # densifying the whole matrix costs genes * cells * 8 bytes, which is gigabytes on an
+    # atlas-sized reference. Dense input deliberately stays dense - gathering rows out of a
+    # dense array is faster than routing them through a sparse format.
+    cells_by_gene = sc_data.T.tocsr() if scipy.sparse.issparse(sc_data) else sc_data.T
     celltypes = countsig.columns
-    bootstrapped_signature = pd.DataFrame()
+    columns = {}
     samples_per_bootstrap = 500
     np.random.seed(42)
     for celltype in celltypes:
-        sc_data_filtered = sc_data.T[annotations == celltype]
+        sc_data_filtered = cells_by_gene[(annotations == celltype).to_numpy()]
+        # sparse matrices do not support len(); shape[0] is the cell count for both formats
+        number_of_cells = sc_data_filtered.shape[0]
         for i in range(number_of_bootstraps):
-            selected_rows = np.random.choice(len(sc_data_filtered), samples_per_bootstrap, replace=True)
+            selected_rows = np.random.choice(number_of_cells, samples_per_bootstrap, replace=True)
             summed_rows = sc_data_filtered[selected_rows].sum(axis=0)
-            bootstrapped_signature[f"{celltype}_{i}"] = list(summed_rows)
-    bootstrapped_signature.index = countsig.index
+            # a sparse sum is a (1, genes) matrix, a dense one a flat array
+            columns[f"{celltype}_{i}"] = np.asarray(summed_rows).ravel()
+    # built in one go: assigning column by column repeatedly reallocates the frame
+    bootstrapped_signature = pd.DataFrame(columns, index=countsig.index)
     # to int
-    samples_per_bootstrap = samples_per_bootstrap / 2.5
-    bootstrapped_signature = bootstrapped_signature.astype(int)
-    return bootstrapped_signature
+    return bootstrapped_signature.astype(int)
 
 
 def _de_analysis(
@@ -425,9 +426,10 @@ def build_rectangle_signatures(
 def _create_pseudo_count_sig(sc_counts: np.ndarray, annotations: pd.Series, var_names) -> pd.DataFrame:
     unique_labels, label_indices = np.unique(annotations, return_inverse=True)
     grouped_sum = np.zeros((len(unique_labels), sc_counts.shape[0]))
+    cells_by_gene = sc_counts.T
     for i, _label in enumerate(unique_labels):
         label_columns = label_indices == i
-        grouped_sum[i, :] = np.sum(sc_counts.T[label_columns, :], axis=0)
+        grouped_sum[i, :] = np.sum(cells_by_gene[label_columns, :], axis=0)
     grouped_sum = grouped_sum.T
 
     grouped_sum = pd.DataFrame(grouped_sum, index=var_names, columns=unique_labels).astype(int)
