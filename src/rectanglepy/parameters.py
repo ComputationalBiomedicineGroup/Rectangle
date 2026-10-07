@@ -7,5 +7,5 @@ from dataclasses import dataclass
 class RectangleAdvancedParameters:
     """Advanced parameters for Rectangle internals."""
 
-    number_of_bootstraps: int = 7
+    number_of_bootstraps: int = 20
     grid_search_split_size: int = 50

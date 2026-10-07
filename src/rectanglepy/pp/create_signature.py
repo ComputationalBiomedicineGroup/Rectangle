@@ -134,8 +134,8 @@ def _run_deseq2(
     sc_data,
     annotations: pd.Series,
     n_cpus: int = None,
-    gene_expression_threshold=0.5,
-    number_of_bootstraps: int = 7,
+    gene_expression_threshold=0.4,
+    number_of_bootstraps: int = 20,
 ) -> dict[str | int, pd.DataFrame]:
     results = {}
     inference = DefaultInference(n_cpus=n_cpus)
@@ -169,7 +169,7 @@ def _run_deseq2(
     return results
 
 
-def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps: int = 7) -> pd.DataFrame:
+def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootstraps: int = 20) -> pd.DataFrame:
     # Cells are only ever summed here, never read one by one, so sparse input is kept sparse:
     # densifying the whole matrix costs genes * cells * 8 bytes, which is gigabytes on an
     # atlas-sized reference. Dense input deliberately stays dense - gathering rows out of a
@@ -177,7 +177,7 @@ def _create_bootstrap_signature(countsig, sc_data, annotations, number_of_bootst
     cells_by_gene = sc_data.T.tocsr() if scipy.sparse.issparse(sc_data) else sc_data.T
     celltypes = countsig.columns
     columns = {}
-    samples_per_bootstrap = 500
+    samples_per_bootstrap = 1000
     np.random.seed(42)
     for celltype in celltypes:
         sc_data_filtered = cells_by_gene[(annotations == celltype).to_numpy()]
@@ -203,7 +203,7 @@ def _de_analysis(
     optimize_cutoffs: bool,
     n_cpus: int = None,
     genes=None,
-    gene_expression_threshold=0.5,
+    gene_expression_threshold=0.4,
     advanced_parameters: RectangleAdvancedParameters = None,
 ) -> tuple[Series, dict[str, [str]] :, DataFrame | None]:
     logger.info("Starting DE analysis")
@@ -308,7 +308,7 @@ def build_rectangle_signatures(
     p=0.015,
     lfc=1.5,
     n_cpus: int = None,
-    gene_expression_threshold=0.5,
+    gene_expression_threshold=0.4,
     advanced_parameters: RectangleAdvancedParameters = None,
 ) -> RectangleSignatureResult:
     r"""Builds rectangle signatures based on single-cell  count data and annotations.
@@ -334,7 +334,7 @@ def build_rectangle_signatures(
     n_cpus
         The number of cpus to use for the DE analysis. Defaults to the number of cpus available.
     gene_expression_threshold
-        The gene expression threshold for the DE analysis. How many cells need to express a gene to be considered in DGE
+        The gene expression threshold for the DE analysis. The fraction of cells that must express a gene to be considered in DGE. Defaults to 0.4
     advanced_parameters
         Optional advanced Rectangle parameters. Defaults are used when not provided.
 
@@ -445,7 +445,7 @@ def _optimize_parameters(
     grid_search_split_size: int = 50,
 ) -> pd.DataFrame:
     # search space for p and lfc
-    lfcs = [x / 100 for x in range(160, 230, 10)]
+    lfcs = [1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
     ps = [x / 1000 for x in range(50, 51, 1)]
 
     results = []

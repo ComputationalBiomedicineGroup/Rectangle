@@ -265,8 +265,6 @@ def _calculate_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_g
     weights_scaled = _scale_weights(weights)
     weights_scaled_no_inf = weights_scaled[weights_scaled != np.inf]
     qp_gld_sum = sum(qp_gld)
-    # the design matrix reproduces the original ``-1 + signature`` term of the WLS fit
-    design = signature_values - 1.0
     subset_size = n_genes // 2
     n_subsets = 100
     # try multiple values of the dampening constant (multiplier)
@@ -277,7 +275,8 @@ def _calculate_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_g
         multiplier = 2**i
         weights_dampened = np.minimum(weights_scaled, multiplier)
         subsets = np.array([np.random.choice(n_genes, size=subset_size, replace=False) for _ in range(n_subsets)])
-        params = _batched_wls(design, bulk_values, weights_dampened, subsets)
+        # WLS uses the signature directly; no intercept column is added.
+        params = _batched_wls(signature_values, bulk_values, weights_dampened, subsets)
         solutions = params * qp_gld_sum / params.sum(axis=1, keepdims=True)
 
         solutions_std.append(np.nanstd(solutions, axis=0, ddof=1))
