@@ -24,7 +24,7 @@ def rectangle(
     p=0.015,
     lfc=1.5,
     n_cpus: int = None,
-    gene_expression_threshold=0.5,
+    gene_expression_threshold=0.4,
     advanced_parameters: RectangleAdvancedParameters = None,
 ) -> tuple[DataFrame, RectangleSignatureResult]:
     r"""All in one deconvolution method. Creates signatures and deconvolutes the bulk data. Has options for subsampling and consensus runs.
@@ -52,7 +52,7 @@ def rectangle(
     correct_mrna_bias : bool
         A flag indicating whether to correct for mRNA bias. Defaults to True.
     gene_expression_threshold : float
-        The threshold for gene expression. Genes with expression below this threshold are removed from the analysis.
+        The threshold for gene expression. Genes must be expressed in at least this fraction of cells. Defaults to 0.4.
     advanced_parameters
         Optional advanced Rectangle parameters. Defaults are used when not provided.
 

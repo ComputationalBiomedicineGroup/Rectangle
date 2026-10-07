@@ -7,16 +7,164 @@ import numpy as np
 import osqp
 import pandas as pd
 import scipy.sparse as sp
-import statsmodels.api as sm
 from joblib import Parallel, delayed, parallel_backend
 from loguru import logger
 
 from rectanglepy.pp.rectangle_signature import RectangleSignatureResult
 
+# OSQP can return noticeably different solutions from active-set QP when P is singular/ill-conditioned.
+# A tiny ridge makes the problem strictly convex and closer to quadprog behavior.
+QP_RIDGE = 1e-8
+
 
 def _scale_weights(weights: np.ndarray) -> np.ndarray:
     min_weight = np.nextafter(min(weights), np.float64(1.0))  # prevent division by zero
     return weights / min_weight
+
+
+def _upper_triangular_csc_pattern(n_vars: int) -> tuple[np.ndarray, np.ndarray]:
+    """Returns the (indices, indptr) of a fully populated upper triangular CSC matrix.
+
+    OSQP only stores the upper triangle of P, so handing it the triangle directly saves the
+    conversion of the full symmetric matrix on every solve.
+    """
+    indices = np.concatenate([np.arange(column + 1) for column in range(n_vars)]).astype(np.int32)
+    indptr = np.concatenate(([0], np.cumsum(np.arange(1, n_vars + 1)))).astype(np.int32)
+    return indices, indptr
+
+
+class _QuadraticProgram:
+    """A deconvolution QP for one (signature, bulk) pair, solvable at several dampening weights.
+
+    Everything that does not depend on the weights - the numpy views of the inputs and the constraint
+    matrix with its bounds - is built once and shared by all solves, which keeps it out of the
+    dampened least squares iteration.
+
+    Note that each solve still gets its own OSQP workspace: reusing one across solves makes OSQP
+    keep the problem scaling of the first objective, which perturbs the fixed point the iteration
+    converges to (and is not faster at these problem sizes).
+    """
+
+    def __init__(
+        self,
+        signature: pd.DataFrame,
+        bulk: pd.Series,
+        prev_assignments: list[int | str] = None,
+        prev_solution: pd.Series = None,
+    ):
+        if not signature.index.equals(bulk.index):
+            bulk = bulk.reindex(signature.index)
+        self.signature = signature.to_numpy(dtype=np.float64)
+        self.bulk = bulk.to_numpy(dtype=np.float64)
+        self.n_vars = self.signature.shape[1]  # number of cell types / fractions
+
+        self._triu_indices, self._triu_indptr = _upper_triangular_csc_pattern(self.n_vars)
+        self._triu_selection = np.tril_indices(self.n_vars)  # reads P.T column-major upper triangle
+        self._constraints, self._lower_bounds = self._build_constraints(prev_assignments, prev_solution)
+        self._upper_bounds = np.full_like(self._lower_bounds, np.inf, dtype=np.float64)
+
+    def _build_constraints(
+        self, prev_assignments: list[int | str], prev_solution: pd.Series
+    ) -> tuple[sp.csc_matrix, np.ndarray]:
+        # ----- Constraints in the original quadprog form: C.T x >= b
+        # We build C (n_vars, n_constraints) then map to OSQP: A = C.T, l=b, u=+inf
+        C_cols = []
+        b_list = []
+
+        # Constraint 1: sum(x) <= 1  ->  -sum(x) >= -1
+        C_cols.append(-np.ones((self.n_vars, 1), dtype=np.float64))
+        b_list.append(np.array([-1.0], dtype=np.float64))
+
+        # Constraint 2: x >= 0  -> I x >= 0
+        C_cols.append(np.eye(self.n_vars, dtype=np.float64))
+        b_list.append(np.zeros(self.n_vars, dtype=np.float64))
+
+        # Constraint 3: keep close to prev_solution (this encoding already turns upper bounds into >= via negation)
+        if prev_solution is not None:
+            if prev_assignments is None:
+                raise ValueError("prev_assignments must be provided when prev_solution is provided.")
+
+            for cluster in prev_solution.index:
+                # x_cluster <= upper  ->  -x_cluster >= -upper
+                C_upper = np.array(
+                    [-1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
+                    dtype=np.float64,
+                ).reshape(-1, 1)
+
+                # x_cluster >= lower  ->  +x_cluster >= +lower
+                C_lower = np.array(
+                    [1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
+                    dtype=np.float64,
+                ).reshape(-1, 1)
+
+                prev_weight = float(prev_solution.loc[cluster])
+                upper = min(1.0, prev_weight + 0.03)
+                lower = max(0.0, prev_weight - 0.03)
+
+                C_cols.append(C_upper)
+                b_list.append(np.array([-upper], dtype=np.float64))
+
+                C_cols.append(C_lower)
+                b_list.append(np.array([lower], dtype=np.float64))
+
+        C = np.concatenate(C_cols, axis=1)  # (n_vars, n_constraints)
+        b = np.concatenate(b_list, axis=0).astype(np.float64)  # (n_constraints,)
+
+        # OSQP uses l <= A x <= u
+        return sp.csc_matrix(C.T), b
+
+    def _objective(self, gld: np.ndarray, multiplier: int) -> tuple[np.ndarray, np.ndarray]:
+        # Minimize     1/2 x^T G x - a^T x
+        if multiplier is None:
+            G = self.signature.T @ self.signature
+            a = self.signature.T @ self.bulk
+        else:
+            weights = np.square(1 / (self.signature @ gld))
+            weights_dampened = np.clip(_scale_weights(weights), None, multiplier)
+            # equivalent to signature.T @ diag(weights) @ signature, without the dense (genes, genes) matrix
+            G = self.signature.T @ (weights_dampened[:, None] * self.signature)
+            a = self.signature.T @ (weights_dampened * self.bulk)
+
+        # ----- Map to OSQP: minimize 1/2 x^T P x + q^T x  ->  q = -a
+        P = G
+        q = -a
+
+        # Optional scaling
+        scale = np.linalg.norm(P)
+        if scale > 0:
+            P = P / scale
+            q = q / scale
+
+        P = ((P + P.T) / 2.0) + QP_RIDGE * np.eye(self.n_vars, dtype=np.float64)
+        return P, q
+
+    def solve(self, gld: np.ndarray = None, multiplier: int = None) -> np.ndarray:
+        P, q = self._objective(gld, multiplier)
+        P_data = P.T[self._triu_selection]  # upper triangle in CSC (column major) order
+        P_sp = sp.csc_matrix((P_data, self._triu_indices, self._triu_indptr), shape=(self.n_vars, self.n_vars))
+
+        solver = osqp.OSQP()
+        solver.setup(
+            P=P_sp,
+            q=q,
+            A=self._constraints,
+            l=self._lower_bounds,
+            u=self._upper_bounds,
+            verbose=False,
+            eps_abs=1e-7,
+            eps_rel=1e-7,
+            max_iter=50000,
+            polish=True,
+            warm_start=False,
+            scaled_termination=False,
+        )
+
+        res = solver.solve()
+
+        if res.info.status_val not in (1,):  # 1 = solved
+            raise RuntimeError(f"OSQP did not solve the problem: {res.info.status}")
+
+        return res.x
 
 
 def solve_qp(
@@ -52,143 +200,89 @@ def solve_qp(
     Notes
     -----
     This function uses quadratic programming to solve the deconvolution problem. The objective is to minimize the difference between the observed bulk data and the data predicted by the signature matrix and the cell fractions. The function also includes constraints to ensure that the cell fractions are non-negative and sum to 1, and to make the solution similar to the previous assignments and weights if they are provided.
+
+    Callers that solve the same problem at several dampening weights (e.g. the dampened least squares
+    iteration) should use :class:`_QuadraticProgram` directly, which shares the weight independent
+    parts of the problem across solves.
     """
-    # ------------------ QP-based deconvolution
-    # Minimize     1/2 x^T G x - a^T x
-    # Subject to   C.T x >= b
-    if multiplier is None:
-        a = (signature.T @ bulk).to_numpy(dtype=np.float64)
-        G = (signature.T @ signature).to_numpy(dtype=np.float64)
-    else:
-        weights = np.square(1 / (signature @ gld))
-        weights_dampened = np.clip(_scale_weights(weights), None, multiplier)
-        W = np.diag(np.asarray(weights_dampened, dtype=np.float64))
-        G = (signature.T.to_numpy() @ (W @ signature.to_numpy())).astype(np.float64)
-        a = (signature.T.to_numpy() @ (W @ bulk.to_numpy())).astype(np.float64)
+    problem = _QuadraticProgram(signature, bulk, prev_assignments, prev_solution)
+    return problem.solve(gld, multiplier)
 
-    n_vars = G.shape[0]  # number of cell types / fractions
 
-    # ----- Constraints in your original quadprog form: C.T x >= b
-    # We'll build C (n_vars, n_constraints) then map to OSQP: A = C.T, l=b, u=+inf
-    C_cols = []
-    b_list = []
+def _batched_wls(
+    design: np.ndarray,
+    response: np.ndarray,
+    weights: np.ndarray,
+    subsets: np.ndarray,
+    max_bytes: int = 64 * 1024**2,
+) -> np.ndarray:
+    """Fits one weighted least squares model per gene subset in batch.
 
-    # Constraint 1: sum(x) <= 1  ->  -sum(x) >= -1
-    C_cols.append(-np.ones((n_vars, 1), dtype=np.float64))
-    b_list.append(np.array([-1.0], dtype=np.float64))
+    Mirrors ``statsmodels.api.WLS(...).fit()``: the design and the response are whitened with the
+    square root of the weights and the parameters are read off the pseudo inverse of the whitened
+    design. Stacking the subsets lets numpy loop over them in C instead of Python.
 
-    # Constraint 2: x >= 0  -> I x >= 0
-    C_cols.append(np.eye(n_vars, dtype=np.float64))
-    b_list.append(np.zeros(n_vars, dtype=np.float64))
+    Parameters
+    ----------
+    design : np.ndarray
+        The (genes, cell types) design matrix.
+    response : np.ndarray
+        The (genes,) response vector.
+    weights : np.ndarray
+        The (genes,) regression weights.
+    subsets : np.ndarray
+        A (n_subsets, subset size) array of gene indices, one row per model.
+    max_bytes : int
+        Upper bound on the size of a single whitened design batch, used to chunk the subsets.
 
-    # Constraint 3: keep close to prev_solution (your encoding already turns upper bounds into >= via negation)
-    if prev_solution is not None:
-        if prev_assignments is None:
-            raise ValueError("prev_assignments must be provided when prev_solution is provided.")
+    Returns
+    -------
+    np.ndarray
+        A (n_subsets, cell types) array of fitted parameters.
+    """
+    n_subsets, subset_size = subsets.shape
+    n_params = design.shape[1]
+    params = np.empty((n_subsets, n_params), dtype=np.float64)
 
-        for cluster in prev_solution.index:
-            # x_cluster <= upper  ->  -x_cluster >= -upper
-            C_upper = np.array(
-                [-1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
-                dtype=np.float64,
-            ).reshape(-1, 1)
+    chunk_size = max(1, int(max_bytes // (subset_size * n_params * design.itemsize)))
+    for start in range(0, n_subsets, chunk_size):
+        chunk = subsets[start : start + chunk_size]
+        sqrt_weights = np.sqrt(weights[chunk])  # (chunk, subset size)
+        whitened_design = design[chunk] * sqrt_weights[:, :, None]  # (chunk, subset size, cell types)
+        whitened_response = response[chunk] * sqrt_weights
+        params[start : start + chunk_size] = np.einsum("bpg,bg->bp", np.linalg.pinv(whitened_design), whitened_response)
 
-            # x_cluster >= lower  ->  +x_cluster >= +lower
-            C_lower = np.array(
-                [1.0 if str(x) == str(cluster) else 0.0 for x in prev_assignments],
-                dtype=np.float64,
-            ).reshape(-1, 1)
-
-            prev_weight = float(prev_solution.loc[cluster])
-            upper = min(1.0, prev_weight + 0.03)
-            lower = max(0.0, prev_weight - 0.03)
-
-            C_cols.append(C_upper)
-            b_list.append(np.array([-upper], dtype=np.float64))
-
-            C_cols.append(C_lower)
-            b_list.append(np.array([lower], dtype=np.float64))
-
-    C = np.concatenate(C_cols, axis=1)  # (n_vars, n_constraints)
-    b = np.concatenate(b_list, axis=0).astype(np.float64)  # (n_constraints,)
-
-    # ----- Map to OSQP: minimize 1/2 x^T P x + q^T x
-    # Your objective: 1/2 x^T G x - a^T x  -> q = -a
-    P = G
-    q = -a
-
-    # Optional scaling
-    scale = np.linalg.norm(P)
-    if scale > 0:
-        P = P / scale
-        q = q / scale
-
-    # OSQP can return noticeably different solutions from active-set QP when P is singular/ill-conditioned.
-    # Add tiny ridge to make the problem strictly convex and closer to quadprog behavior.
-    ridge = 1e-8
-    P = ((P + P.T) / 2.0) + ridge * np.eye(n_vars, dtype=np.float64)
-
-    # OSQP uses l <= A x <= u
-    A = C.T  # (n_constraints, n_vars)
-    l = b
-    u = np.full_like(l, np.inf, dtype=np.float64)
-
-    # Sparse matrices (required/expected)
-    P_sp = sp.csc_matrix(P)
-    A_sp = sp.csc_matrix(A)
-
-    solver = osqp.OSQP()
-    solver.setup(
-        P=P_sp,
-        q=q,
-        A=A_sp,
-        l=l,
-        u=u,
-        verbose=False,
-        eps_abs=1e-7,
-        eps_rel=1e-7,
-        max_iter=50000,
-        polish=True,
-        warm_start=False,
-        scaled_termination=False,
-    )
-
-    res = solver.solve()
-
-    if res.info.status_val not in (1,):  # 1 = solved
-        raise RuntimeError(f"OSQP did not solve the problem: {res.info.status}")
-
-    return res.x
+    return params
 
 
 def _calculate_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_gld: np.ndarray) -> int:
     solutions_std = []
     np.random.seed(1)
-    weights = np.square(1 / (np.dot(signature, qp_gld)))
+    signature_values = np.asarray(signature, dtype=np.float64)
+    bulk_values = np.asarray(bulk, dtype=np.float64)
+    n_genes = signature_values.shape[0]
+    weights = np.square(1 / (signature_values @ qp_gld))
     weights_scaled = _scale_weights(weights)
     weights_scaled_no_inf = weights_scaled[weights_scaled != np.inf]
     qp_gld_sum = sum(qp_gld)
+    subset_size = n_genes // 2
+    n_subsets = 100
     # try multiple values of the dampening constant (multiplier)
     # for each, calculate the variance of the dampened weighted solution for a subset of genes
     max_range = 40
     multiplier_range = min(max_range, math.ceil(np.log2(max(weights_scaled_no_inf))))
     for i in range(multiplier_range):
-        solutions = []
         multiplier = 2**i
-        weights_dampened = np.array([multiplier if multiplier <= x else x for x in weights_scaled]).astype("double")
-        for _ in range(100):
-            subset = np.random.choice(len(signature), size=len(signature) // 2, replace=False)
-            bulk_subset = bulk.iloc[list(subset)]
-            signature_subset = signature.iloc[subset, :]
-            fit = sm.WLS(bulk_subset, -1 + signature_subset, weights=weights_dampened[subset]).fit()
-            solution = fit.params * qp_gld_sum / sum(fit.params)
-            solutions.append(solution)
-        solutions_df = pd.DataFrame(solutions)
+        weights_dampened = np.minimum(weights_scaled, multiplier)
+        subsets = np.array([np.random.choice(n_genes, size=subset_size, replace=False) for _ in range(n_subsets)])
+        # WLS uses the signature directly; no intercept column is added.
+        params = _batched_wls(signature_values, bulk_values, weights_dampened, subsets)
+        solutions = params * qp_gld_sum / params.sum(axis=1, keepdims=True)
 
-        solutions_std.append(solutions_df.std(axis=0))
-    solutions_std_df = pd.DataFrame(solutions_std)
-    means = solutions_std_df.apply(lambda x: np.mean(x**2), axis=1)
-    best_dampening_constant = means.idxmin()
+        solutions_std.append(np.nanstd(solutions, axis=0, ddof=1))
+    solutions_std_array = np.array(solutions_std)
+    means = np.nanmean(np.square(solutions_std_array), axis=1)
+    best_dampening_constant = int(np.nanargmin(means))
     return best_dampening_constant
 
 
@@ -202,7 +296,8 @@ def _calculate_ls(
     signature = signature.loc[genes].sort_index()
     bulk = bulk.loc[genes].sort_index().astype("double")
 
-    approximate_solution = solve_qp(signature, bulk, prev_assignments, prev_weights)
+    problem = _QuadraticProgram(signature, bulk, prev_assignments, prev_weights)
+    approximate_solution = problem.solve()
     dampening_constant = _calculate_dampening_constant(signature, bulk, approximate_solution)
     multiplier = 2**dampening_constant
 
@@ -212,7 +307,7 @@ def _calculate_ls(
     iterations = 2
     solutions_sum = approximate_solution
     while (change > convergence_threshold) and (iterations < max_iterations):
-        dampened_solution = solve_qp(signature, bulk, prev_assignments, prev_weights, approximate_solution, multiplier)
+        dampened_solution = problem.solve(approximate_solution, multiplier)
         solutions_sum += dampened_solution
         solution_averages = solutions_sum / iterations
         change = np.linalg.norm(solution_averages - approximate_solution, 1)
