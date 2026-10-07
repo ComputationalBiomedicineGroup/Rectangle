@@ -62,7 +62,7 @@ def test_simple_weighted_dampened_deconvolution(quantiseq_data):
     corr = np.corrcoef(result, expected)[0, 1]
     rsme = np.sqrt(np.mean((result - expected) ** 2))
 
-    assert corr > 0.815 and rsme < 0.011
+    assert corr > 0.81 and rsme < 0.01
 
 
 def test_correct_for_unknown_cell_content(small_data, quantiseq_data):

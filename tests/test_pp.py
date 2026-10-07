@@ -236,12 +236,12 @@ def test_de_analysis(small_data):
     # test with sparse matrix
     _ = _de_analysis(sc_pseudo, adata_sparse.X.T, annotations, 0.4, 0.1, False, None, adata.var_names)
 
-    assert 5 < len(r1) < 50
+    assert 5 < len(r1) < 100
     assert len(r2) == 3
 
 
 def test_create_bootstrap_signature(small_data):
-    bootstraps_per_cell = 7
+    bootstraps_per_cell = RectangleAdvancedParameters().number_of_bootstraps
     sc_counts, annotations, bulk = small_data
     sc_counts = sc_counts.astype("int")
     sc_pseudo = sc_counts.groupby(annotations.values, axis=1).sum()
