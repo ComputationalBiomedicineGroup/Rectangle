@@ -445,7 +445,7 @@ def _optimize_parameters(
     grid_search_split_size: int = 50,
 ) -> pd.DataFrame:
     # search space for p and lfc
-    lfcs = [1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
+    lfcs = [1.6, 1.7, 1.8, 1.9, 2.0, 2.1, 2.2]
     ps = [x / 1000 for x in range(50, 51, 1)]
 
     results = []

@@ -98,8 +98,8 @@ class _QuadraticProgram:
                 ).reshape(-1, 1)
 
                 prev_weight = float(prev_solution.loc[cluster])
-                upper = min(1.0, prev_weight + 0.03)
-                lower = max(0.0, prev_weight - 0.03)
+                upper = min(1.0, prev_weight + 0.05)
+                lower = max(0.0, prev_weight - 0.05)
 
                 C_cols.append(C_upper)
                 b_list.append(np.array([-upper], dtype=np.float64))
@@ -289,7 +289,7 @@ def _calculate_dampening_constant(signature: pd.DataFrame, bulk: pd.Series, qp_g
 def _calculate_ls(
     signature: pd.DataFrame,
     bulk: pd.Series,
-    prev_assignments: list[int or str] = None,
+    prev_assignments: list[int | str] = None,
     prev_weights: pd.Series = None,
 ) -> pd.Series:
     genes = list(set(signature.index) & set(bulk.index))
@@ -325,6 +325,8 @@ def deconvolution(
     bulks: pd.DataFrame,
     correct_mrna_bias: bool = True,
     n_cpus: int = None,
+    correct_unknown_positive_residual: bool = True,
+    correct_unknown_fraction: bool = True,
 ) -> pd.DataFrame:
     """Performs recursive deconvolution using rectangle signatures and bulk data.
 
@@ -338,6 +340,15 @@ def deconvolution(
         A flag indicating whether to correct for mRNA bias. Defaults to True.
     n_cpus : int
         The number of CPUs to use for parallel processing. If not provided, the function will use all available CPUs. Each CPU will process a bulk sample.
+    correct_unknown_positive_residual : bool
+        When a cohort has predominantly positive reconstruction residuals, use each sample's
+        positive residual mass as its unknown content, so that over-prediction of unrelated genes
+        cannot cancel expression from an omitted population. Defaults to True.
+        Only applies when correct_unknown_fraction is True.
+    correct_unknown_fraction : bool
+        Estimate and correct for unknown cell content. Defaults to True.
+        When False, return known cell fractions normalized to sum to one,
+        with no Unknown column. Gene-level reconstruction residuals are still returned.
 
     Returns
     -------
@@ -361,7 +372,7 @@ def deconvolution(
         results = Parallel(
             n_jobs=num_processes,
         )(
-            delayed(_process_bulk)(signatures, i, bulk, bulks.columns, correct_mrna_bias)
+            delayed(_process_bulk)(signatures, i, bulk, bulks.columns, correct_mrna_bias, correct_unknown_fraction)
             for i, bulk in enumerate(bulks.values)
         )
     estimations = [result[0] for result in results]
@@ -369,16 +380,73 @@ def deconvolution(
     estimation_df = pd.DataFrame(estimations, index=bulks.index)
     bulk_err_df = pd.DataFrame(bulk_err, index=bulks.index)
 
+    if correct_unknown_fraction and correct_unknown_positive_residual:
+        estimation_df = _apply_cohort_positive_residual_correction(estimation_df, bulks, bulk_err_df)
+
     return estimation_df, bulk_err_df
 
 
+def _apply_cohort_positive_residual_correction(
+    estimations: pd.DataFrame,
+    bulks: pd.DataFrame,
+    bulk_errors: pd.DataFrame,
+) -> pd.DataFrame:
+    """Use positive residual mass when a cohort contains dominant omitted expression.
+
+    The signed residual used for the per-sample unknown-content correction can cancel across
+    genes. When positive residual mass is more than twice the negative residual mass at the
+    cohort median, the residual is predominantly one-sided rather than ordinary reconstruction
+    noise. In that case, use each sample's positive residual mass as its unknown fraction: an
+    omitted population can add expression, whereas expression over-predicted by known cell types
+    should not cancel it.
+    """
+    common_genes = bulks.columns.intersection(bulk_errors.columns)
+    if len(common_genes) == 0 or "Unknown" not in estimations.columns:
+        return estimations
+
+    observed = bulks.loc[:, common_genes].astype(float).clip(lower=0)
+    observed_total = observed.sum(axis=1)
+    finite_residual = bulk_errors.loc[:, common_genes].notna().any(axis=1)
+    valid = (observed_total > 0) & finite_residual
+    if not valid.any():
+        return estimations
+
+    residual = bulk_errors.loc[valid, common_genes].astype(float)
+    positive_fraction = residual.clip(lower=0).sum(axis=1).div(observed_total.loc[valid]).clip(0, 1)
+    negative_fraction = (-residual.clip(upper=0).sum(axis=1)).div(observed_total.loc[valid]).clip(0, 1)
+
+    if positive_fraction.median() <= 2 * negative_fraction.median():
+        return estimations
+
+    adjusted = estimations.copy()
+    known_columns = adjusted.columns.difference(["Unknown"], sort=False)
+    known_total = adjusted.loc[valid, known_columns].sum(axis=1)
+    rescalable = known_total > 0
+    rows = known_total.index[rescalable]
+    adjusted.loc[rows, known_columns] = adjusted.loc[rows, known_columns].mul(
+        (1 - positive_fraction.loc[rows]).div(known_total.loc[rows]), axis=0
+    )
+    adjusted.loc[rows, "Unknown"] = positive_fraction.loc[rows]
+    return adjusted
+
+
 def _process_bulk(
-    signatures: RectangleSignatureResult, i: int, bulk: pd.Series, var_names: pd.Index, correct_mrna_bias: bool
+    signatures: RectangleSignatureResult,
+    i: int,
+    bulk: pd.Series,
+    var_names: pd.Index,
+    correct_mrna_bias: bool,
+    correct_unknown_fraction: bool = True,
 ) -> tuple[pd.Series, pd.Series]:
     try:
         logger.info(f"Deconvolute fractions for bulk: {i}")
         bulk = pd.Series(bulk, index=var_names)
-        estimations, bulk_err = _deconvolute(signatures, bulk, correct_mrna_bias=correct_mrna_bias)
+        estimations, bulk_err = _deconvolute(
+            signatures,
+            bulk,
+            correct_mrna_bias=correct_mrna_bias,
+            correct_unknown_fraction=correct_unknown_fraction,
+        )
         logger.info(f"Finished deconvolution for bulk: {i}")
         return estimations, bulk_err
     except Exception as e:
@@ -387,7 +455,10 @@ def _process_bulk(
 
 
 def _deconvolute(
-    signatures: RectangleSignatureResult, bulk: pd.Series, correct_mrna_bias: bool = True
+    signatures: RectangleSignatureResult,
+    bulk: pd.Series,
+    correct_mrna_bias: bool = True,
+    correct_unknown_fraction: bool = True,
 ) -> tuple[pd.Series, pd.Series]:
     bulk_direct_reduced = bulk[bulk.index.isin(signatures.signature_genes)]
     signature_genes_direct_reduced = signatures.signature_genes[
@@ -405,7 +476,11 @@ def _deconvolute(
 
     if clustered_pseudobulk_sig_cpm is None:
         start_fractions, bulk_err = correct_for_unknown_cell_content(
-            bulk, pseudobulk_sig_cpm, start_fractions, bias_factors
+            bulk,
+            pseudobulk_sig_cpm,
+            start_fractions,
+            bias_factors,
+            correct_unknown_fraction=correct_unknown_fraction,
         )
         return start_fractions, bulk_err
 
@@ -425,7 +500,11 @@ def _deconvolute(
     except Exception as e:
         logger.warning(f"Recursive deconvolution failed with error: {e}")
         start_fractions, bulk_err = correct_for_unknown_cell_content(
-            bulk, pseudobulk_sig_cpm, start_fractions, bias_factors
+            bulk,
+            pseudobulk_sig_cpm,
+            start_fractions,
+            bias_factors,
+            correct_unknown_fraction=correct_unknown_fraction,
         )
         return start_fractions, bulk_err
 
@@ -448,13 +527,21 @@ def _deconvolute(
     final_fractions = final_fractions.clip(lower=0)
 
     final_fractions, bulk_err = correct_for_unknown_cell_content(
-        bulk, pseudobulk_sig_cpm, final_fractions, bias_factors
+        bulk,
+        pseudobulk_sig_cpm,
+        final_fractions,
+        bias_factors,
+        correct_unknown_fraction=correct_unknown_fraction,
     )
     return final_fractions, bulk_err
 
 
 def correct_for_unknown_cell_content(
-    bulk: pd.Series, pseudo_signature_cpm: pd.DataFrame, estimates: pd.Series, bias_factors: pd.Series
+    bulk: pd.Series,
+    pseudo_signature_cpm: pd.DataFrame,
+    estimates: pd.Series,
+    bias_factors: pd.Series,
+    correct_unknown_fraction: bool = True,
 ) -> tuple[pd.Series, pd.Series]:
     r"""Performs correction for unknown cell content using the pseudo signature and bulk data.
 
@@ -483,6 +570,9 @@ def correct_for_unknown_cell_content(
         The estimated cell fractions resulting from the deconvolution. Indexed by cell type.
     bias_factors
         The mRNA bias factors of the sc data atlas.
+    correct_unknown_fraction
+        If False, skip unknown-content estimation and return known fractions
+        normalized to sum to one, while retaining reconstruction residuals.
 
     Returns
     -------
@@ -493,6 +583,8 @@ def correct_for_unknown_cell_content(
 
     """
     if estimates.sum() == 0:
+        if not correct_unknown_fraction:
+            raise ValueError("Cannot normalize known cell fractions with a zero total")
         estimates_fix = estimates
         # analysis fails if all cell fractions are zero, so we set the unknown cell content to ß
         estimates_fix["Unknown"] = 0
@@ -510,6 +602,9 @@ def correct_for_unknown_cell_content(
     bulk_est.index = signature.index
 
     bulk_err = bulk - bulk_est
+
+    if not correct_unknown_fraction:
+        return estimates / estimates.sum(), bulk_err
 
     # Calculate the unknown cellular content ad the difference of
     # per-sample overall expression levels in the true vs. reconstructed

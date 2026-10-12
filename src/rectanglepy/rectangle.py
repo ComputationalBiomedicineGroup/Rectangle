@@ -20,6 +20,8 @@ def rectangle(
     layer: str = None,
     raw: bool = False,
     correct_mrna_bias: bool = True,
+    correct_unknown_fraction: bool = True,
+    correct_unknown_positive_residual: bool = True,
     optimize_cutoffs=True,
     p=0.015,
     lfc=1.5,
@@ -51,6 +53,14 @@ def rectangle(
         The number of cpus to use for the DE analysis. None value takes all cpus available.
     correct_mrna_bias : bool
         A flag indicating whether to correct for mRNA bias. Defaults to True.
+    correct_unknown_positive_residual : bool
+        When a cohort has predominantly positive reconstruction residuals, use each sample's
+        positive residual mass as its unknown content. Defaults to True.
+        Only applies when correct_unknown_fraction is True.
+    correct_unknown_fraction : bool
+        Estimate and correct for unknown cell content. Defaults to True.
+        When False, return only known cell types normalized to sum to one,
+        without either unknown-content correction. mRNA-bias correction is independent.
     gene_expression_threshold : float
         The threshold for gene expression. Genes must be expressed in at least this fraction of cells. Defaults to 0.4.
     advanced_parameters
@@ -78,7 +88,14 @@ def rectangle(
         advanced_parameters=advanced_parameters,
     )
 
-    estimations, bulk_err = deconvolution(signatures, bulks, correct_mrna_bias, n_cpus)
+    estimations, bulk_err = deconvolution(
+        signatures,
+        bulks,
+        correct_mrna_bias,
+        n_cpus,
+        correct_unknown_positive_residual=correct_unknown_positive_residual,
+        correct_unknown_fraction=correct_unknown_fraction,
+    )
     signatures.unkn_bulk_err = bulk_err
     if "Unknown" in estimations.columns:
         try:
