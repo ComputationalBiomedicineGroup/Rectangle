@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning][].
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-12
+
+### Added
+
+-   Added cohort-level positive residual correction for unknown cell content. When positive reconstruction residuals dominate, the correction uses each sample's positive residual mass to estimate unknown content and rescales known cell fractions accordingly. Enabled by default through `correct_unknown_positive_residual`.
+
 ## [1.4.2] - 2026-05-24
 
 ### Changed
